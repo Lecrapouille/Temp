@@ -1,0 +1,78 @@
+//=============================================================================
+// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
+//
+// This file is part of OpenGLCppWrapper.
+//
+// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+//=============================================================================
+
+#pragma once
+
+#include "Common/Example.hpp"
+
+#include "Assets/AssetIds.hpp"
+#include "Assets/AssetManager.hpp"
+#include "Physics/PhysicsWorld.hpp"
+#include "Render/DebugDraw.hpp"
+#include "Render/Renderer.hpp"
+#include "Scene/Scene.hpp"
+#include "World/Entity.hpp"
+#include "World/EventQueue.hpp"
+#include "World/InputState.hpp"
+#include "World/World.hpp"
+
+#include <vector>
+
+namespace examples
+{
+
+class MvpDemo: public Example
+{
+public:
+
+    MvpDemo() : m_scene(m_world, m_assets) {}
+
+    [[nodiscard]] std::string name() const override { return "24_MvpDemo"; }
+    [[nodiscard]] std::string description() const override;
+    [[nodiscard]] gpu::Status setUp() override;
+    [[nodiscard]] gpu::Status draw(Frame const& p_frame) override;
+
+private:
+
+    assets::AssetManager m_assets;
+    world::World m_world;
+    scene::Scene m_scene;
+    render::Renderer m_renderer;
+    render::DebugDraw m_debug;
+    physics::PhysicsWorld m_physics;
+    world::EventQueue m_events;
+    world::InputState m_input;
+
+    assets::MeshAssetId m_cube_mesh;
+    assets::MaterialInstanceId m_red;
+    assets::MaterialInstanceId m_blue;
+
+    world::Entity m_camera;
+    world::Entity m_sun;
+    world::Entity m_lamp;
+    world::Entity m_floor;
+    world::Entity m_spinner;
+    std::vector<world::Entity> m_cubes;
+
+    std::string m_scene_path;
+    bool m_saved = false;
+};
+
+} // namespace examples

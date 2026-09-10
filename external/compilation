@@ -1,0 +1,12 @@
+#!/bin/bash -e
+
+# Script called by `make compile-external-libs`. MyMakefile looks for a file
+# named exactly "compilation" inside the third parties folder.
+#
+# Every dependency listed in the manifest is either header only (stb, units,
+# json) or compiled directly with the project sources (imgui, compiled by
+# examples/Makefile). Nothing has to be built separately, which is on purpose:
+# it removes the whole class of "the external library did not build" failures
+# that SOIL and Bullet used to cause.
+
+echo "No external library needs a separate compilation step."
