@@ -1,26 +1,26 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
 #pragma once
 
-#include "GPU/GPU.hpp"
+#include "Compages/GPU/GPU.hpp"
 
 #include <string>
 
@@ -147,6 +147,30 @@ public:
     [[nodiscard]] bool keyDown(int p_glfw_key) const;
 
     // ------------------------------------------------------------------------
+    //! \brief Hide the pointer and keep it in the window, so that the mouse
+    //! can move forever in any direction: what a first person view needs.
+    // ------------------------------------------------------------------------
+    void captureMouse(bool p_captured);
+
+    //! \brief Is the pointer hidden and held?
+    [[nodiscard]] bool mouseCaptured() const
+    {
+        return m_mouse_captured;
+    }
+
+    // ------------------------------------------------------------------------
+    //! \brief Wait for the screen before showing a frame (on by default), or
+    //! show frames as fast as they are drawn, to measure what they cost.
+    // ------------------------------------------------------------------------
+    void vsync(bool p_enabled);
+
+    //! \brief Is showing a frame waiting for the screen?
+    [[nodiscard]] bool vsync() const
+    {
+        return m_vsync;
+    }
+
+    // ------------------------------------------------------------------------
     //! \brief The window itself, for the parts of the examples that need it, such
     //! as attaching a user interface to it.
     // ------------------------------------------------------------------------
@@ -183,6 +207,8 @@ private:
     bool m_mouse_right = false;
     bool m_mouse_left_was = false;
     bool m_mouse_left_pressed = false;
+    bool m_mouse_captured = false;
+    bool m_vsync = true;
 };
 
 } // namespace examples

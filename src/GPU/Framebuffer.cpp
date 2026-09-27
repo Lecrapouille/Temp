@@ -1,26 +1,26 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/Framebuffer.hpp"
+#include "Compages/GPU/Framebuffer.hpp"
 #include "GPU/Backends/Backend.hpp"
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Device.hpp"
 #include "GPU/Internal/Pools.hpp"
 
 #include <algorithm>
@@ -130,8 +130,12 @@ Result<Framebuffer> Framebuffer::create(std::span<const Attachment> p_colors,
 
     for (std::size_t i = 0u; i < p_colors.size(); ++i)
     {
-        GPU_TRY_ASSIGN(record,
-                       checkedTexture(p_colors[i], "colour", false));
+        auto record_result = checkedTexture(p_colors[i], "colour", false);
+        if (!record_result)
+        {
+            return compages::failure(record_result.error());
+        }
+        auto record = record_result.take();
         std::uint32_t w = 0u;
         std::uint32_t h = 0u;
         sizeOfLevel(record->desc, p_colors[i].level, w, h);
@@ -149,13 +153,18 @@ Result<Framebuffer> Framebuffer::create(std::span<const Attachment> p_colors,
                 std::to_string(height) +
                 ". Every attachment of a framebuffer has to be the same size");
         }
-        colors.push_back(p_colors[i]);
+        colors.emplace_back(p_colors[i]);
     }
 
     Attachment depth;
     if (p_depth.texture)
     {
-        GPU_TRY_ASSIGN(record, checkedTexture(p_depth, "depth", true));
+        auto record_result = checkedTexture(p_depth, "depth", true);
+        if (!record_result)
+        {
+            return compages::failure(record_result.error());
+        }
+        auto record = record_result.take();
         std::uint32_t w = 0u;
         std::uint32_t h = 0u;
         sizeOfLevel(record->desc, p_depth.level, w, h);
@@ -175,7 +184,12 @@ Result<Framebuffer> Framebuffer::create(std::span<const Attachment> p_colors,
         depth = p_depth;
     }
 
-    GPU_TRY_ASSIGN(native, backend::createFramebuffer());
+    auto native_result = backend::createFramebuffer();
+    if (!native_result)
+    {
+        return compages::failure(native_result.error());
+    }
+    auto native = native_result.take();
 
     for (std::uint32_t i = 0u; i < colors.size(); ++i)
     {
@@ -231,6 +245,28 @@ Result<Framebuffer> Framebuffer::create(Texture const& p_color,
     Attachment color{ p_color.handle(), 0u };
     return create(std::span<const Attachment>(&color, 1u),
                   Attachment{ p_depth.handle(), 0u });
+}
+
+//------------------------------------------------------------------------------
+Status Framebuffer::attach(std::span<const Attachment> p_colors,
+                           Attachment p_depth)
+{
+    COMPAGES_TRY_ASSIGN(*this, create(p_colors, p_depth));
+    return success();
+}
+
+//------------------------------------------------------------------------------
+Status Framebuffer::attach(Texture const& p_color)
+{
+    COMPAGES_TRY_ASSIGN(*this, create(p_color));
+    return success();
+}
+
+//------------------------------------------------------------------------------
+Status Framebuffer::attach(Texture const& p_color, Texture const& p_depth)
+{
+    COMPAGES_TRY_ASSIGN(*this, create(p_color, p_depth));
+    return success();
 }
 
 //------------------------------------------------------------------------------

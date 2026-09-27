@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,19 +15,19 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "GPUContext.hpp"
 
-#include "Assets/AssetManager.hpp"
-#include "Assets/Primitives.hpp"
-#include "GPU/GPU.hpp"
-#include "Scene/Scene.hpp"
-#include "Scene/SceneSerializer.hpp"
-#include "World/Components/Light.hpp"
-#include "World/Components/MeshRenderer.hpp"
-#include "World/World.hpp"
+#include "Compages/Scene/Assets/AssetManager.hpp"
+#include "Compages/Scene/Assets/Primitives.hpp"
+#include "Compages/GPU/GPU.hpp"
+#include "Compages/Scene/Scene.hpp"
+#include "Compages/Scene/SceneSerializer.hpp"
+#include "Compages/Scene/Light.hpp"
+#include "Compages/Scene/MeshRenderer.hpp"
+#include "Compages/Scene/World.hpp"
 
 #include <cstdio>
 #include <string>
@@ -39,7 +39,7 @@ namespace
 
 std::string tempScenePath()
 {
-    return std::string("/tmp/gloop_scene_test_") + std::to_string(getpid()) +
+    return std::string("/tmp/compages_scene_test_") + std::to_string(getpid()) +
            ".json";
 }
 
@@ -66,39 +66,39 @@ protected:
 //------------------------------------------------------------------------------
 TEST_F(SceneSerializerTest, RoundTripsAMeshRenderer)
 {
-    assets::AssetManager assets;
-    auto cube = assets::makeCube();
+    scene::AssetManager assets;
+    auto cube = scene::makeCube();
     ASSERT_TRUE(bool(cube));
     auto mesh = assets.addMesh("cube", cube.take());
     ASSERT_TRUE(bool(mesh));
-    auto lit = assets::makeLitMaterial();
+    auto lit = scene::makeLitMaterial();
     ASSERT_TRUE(bool(lit));
     auto material = assets.addMaterial("lit", lit.take());
     ASSERT_TRUE(bool(material));
     auto instance = assets.addMaterialInstance(
         "red",
-        assets::MaterialInstance{ material.value(), Vector3f(1.0f, 0.0f, 0.0f) });
+        scene::MaterialInstance{ material.value(), Vector3f(1.0f, 0.0f, 0.0f) });
     ASSERT_TRUE(bool(instance));
 
-    world::World world;
-    world::Entity root = world.create("Root");
-    world::Entity box = world.create("Box");
+    scene::World world;
+    scene::EntityId root = world.create("Root");
+    scene::EntityId box = world.create("Box");
     world.transform(box).position = Vector3f(1.0f, 2.0f, 3.0f);
-    world.add(box, world::MeshRenderer{ mesh.value(), instance.value() });
+    world.add(box, scene::MeshRenderer{ mesh.value(), instance.value() });
     world.setParent(box, root);
     world.update();
 
     const std::string path = tempScenePath();
     ASSERT_TRUE(bool(scene::save(world, assets, path)));
 
-    world::World loaded;
+    scene::World loaded;
     auto roots = scene::load(loaded, assets, path);
     ASSERT_TRUE(bool(roots));
     ASSERT_EQ(roots.value().size(), 1u);
-    world::Entity loaded_box = loaded.find(roots.value().front(), "Box");
+    scene::EntityId loaded_box = loaded.find(roots.value().front(), "Box");
     ASSERT_TRUE(loaded_box.valid());
-    ASSERT_TRUE(loaded.has<world::MeshRenderer>(loaded_box));
-    ASSERT_EQ(assets.meshName(loaded.get<world::MeshRenderer>(loaded_box).mesh),
+    ASSERT_TRUE(loaded.has<scene::MeshRenderer>(loaded_box));
+    ASSERT_EQ(assets.meshName(loaded.get<scene::MeshRenderer>(loaded_box).mesh),
               "cube");
     ASSERT_NEAR(loaded.transform(loaded_box).position.x, 1.0f, 1.0e-5f);
 
@@ -108,41 +108,41 @@ TEST_F(SceneSerializerTest, RoundTripsAMeshRenderer)
 //------------------------------------------------------------------------------
 TEST_F(SceneSerializerTest, SaveSceneRoundTripsPresentationAndPointLight)
 {
-    assets::AssetManager assets;
-    auto cube = assets::makeCube();
+    scene::AssetManager assets;
+    auto cube = scene::makeCube();
     ASSERT_TRUE(bool(cube));
     auto mesh = assets.addMesh("cube", cube.take());
     ASSERT_TRUE(bool(mesh));
-    auto lit = assets::makeLitMaterial();
+    auto lit = scene::makeLitMaterial();
     ASSERT_TRUE(bool(lit));
     auto material = assets.addMaterial("lit", lit.take());
     ASSERT_TRUE(bool(material));
     auto instance = assets.addMaterialInstance(
         "red",
-        assets::MaterialInstance{ material.value(), Vector3f(1.0f, 0.0f, 0.0f) });
+        scene::MaterialInstance{ material.value(), Vector3f(1.0f, 0.0f, 0.0f) });
     ASSERT_TRUE(bool(instance));
 
-    world::World world;
+    scene::World world;
     scene::Scene scene(world, assets);
-    world::Entity lamp = world.create("Lamp");
-    world.add(lamp, world::PointLight{ Vector3f(1.0f, 0.5f, 0.2f), 2.0f, 15.0f });
-    world::Entity box = world.create("Box");
-    world.add(box, world::MeshRenderer{ mesh.value(), instance.value() });
-    world::Entity camera = world.create("Camera");
-    scene.setActiveCamera(camera);
+    scene::EntityId lamp = world.create("Lamp");
+    world.add(lamp, scene::PointLight{ Vector3f(1.0f, 0.5f, 0.2f), 2.0f, 15.0f });
+    scene::EntityId box = world.create("Box");
+    world.add(box, scene::MeshRenderer{ mesh.value(), instance.value() });
+    scene::EntityId camera = world.create("Camera");
+    scene.activeCamera(camera);
     scene.renderSettings().clear_color = Vector4f(0.1f, 0.2f, 0.3f, 1.0f);
     world.update();
 
     const std::string path = tempScenePath();
     ASSERT_TRUE(bool(scene::saveScene(scene, path)));
 
-    world::World loaded_world;
+    scene::World loaded_world;
     scene::Scene loaded_scene(loaded_world, assets);
     auto roots = scene::loadScene(loaded_scene, path);
     ASSERT_TRUE(bool(roots));
-    world::Entity loaded_lamp{};
-    world::Entity loaded_camera{};
-    for (world::Entity root : roots.value())
+    scene::EntityId loaded_lamp{};
+    scene::EntityId loaded_camera{};
+    for (scene::EntityId root : roots.value())
     {
         if (loaded_world.name(root) == "Lamp")
         {
@@ -155,7 +155,7 @@ TEST_F(SceneSerializerTest, SaveSceneRoundTripsPresentationAndPointLight)
     }
     ASSERT_TRUE(loaded_lamp.valid());
     ASSERT_TRUE(loaded_camera.valid());
-    ASSERT_TRUE(loaded_world.has<world::PointLight>(loaded_lamp));
+    ASSERT_TRUE(loaded_world.has<scene::PointLight>(loaded_lamp));
     ASSERT_NEAR(loaded_scene.renderSettings().clear_color.y, 0.2f, 1.0e-5f);
     ASSERT_EQ(loaded_scene.activeCamera(), loaded_camera);
 

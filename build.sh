@@ -1,11 +1,11 @@
 #!/bin/bash -e
 ##=====================================================================
-## OpenGLCppWrapper: A C++11 OpenGL 'Core' wrapper.
+## Compages: A C++11 OpenGL 'Core' wrapper.
 ## Copyright 2019 Quentin Quadrat <lecrapouille@gmail.com>
 ##
-## This file is part of OpenGLCppWrapper.
+## This file is part of Compages.
 ##
-## OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+## Compages is free software: you can redistribute it and/or modify it
 ## under the terms of the GNU General Public License as published by
 ## the Free Software Foundation, either version 3 of the License, or
 ## (at your option) any later version.
@@ -16,7 +16,7 @@
 ## General Public License for more details.
 ##
 ## You should have received a copy of the GNU General Public License
-## along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+## along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 ##=====================================================================
 
 # Get the number of CPU cores
@@ -27,12 +27,12 @@ else
     NPROC=`nproc`
 fi
 
-# Compile the libOpenGLCppWrapper
+# Compile the libCompages
 make download-external-libs
 make compile-external-libs
 make -j$NPROC
 
-# Compile the OpenGLCppWrapper editor
+# Compile the Compages editor
 (cd editor && make -j$NPROC)
 
 # Compile Examples

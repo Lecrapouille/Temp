@@ -1,27 +1,28 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/Shader.hpp"
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Shader.hpp"
+#include "Compages/GPU/Device.hpp"
+#include "Compages/GPU/Errors.hpp"
 #include "GPU/Internal/Pools.hpp"
-#include "Common/File.hpp"
+#include "Compages/Core/File.hpp"
 
 #include <algorithm>
 #include <vector>
@@ -157,15 +158,23 @@ Result<Shader> Shader::fromSource(ShaderStage p_stage,
 //------------------------------------------------------------------------------
 Result<Shader> Shader::fromFile(std::string const& p_path)
 {
-    GPU_TRY_ASSIGN(stage, stageOfFile(p_path));
-    return fromFile(stage, p_path);
+    auto stage = stageOfFile(p_path);
+    if (!stage)
+    {
+        return failure(stage.error());
+    }
+    return fromFile(stage.value(), p_path);
 }
 
 //------------------------------------------------------------------------------
 Result<Shader> Shader::fromFile(ShaderStage p_stage, std::string const& p_path)
 {
-    GPU_TRY_ASSIGN(source, readSource(p_path));
-    return fromSource(p_stage, source, p_path);
+    auto source = readSource(p_path);
+    if (!source)
+    {
+        return failure(source.error());
+    }
+    return fromSource(p_stage, source.value(), p_path);
 }
 
 //------------------------------------------------------------------------------
@@ -257,8 +266,8 @@ Result<Program> Program::link(std::initializer_list<Shader const*> p_stages)
         }
         detail::ShaderRecord const* record =
             detail::pools().shaders.get(one->handle());
-        natives.push_back(record->native);
-        stages.push_back(record->stage);
+        natives.emplace_back(record->native);
+        stages.emplace_back(record->stage);
     }
 
     // Two stages of the same kind cannot both be linked, and the driver's word
@@ -296,9 +305,11 @@ Result<Program> Program::link(std::initializer_list<Shader const*> p_stages)
 Result<Program> Program::fromSources(std::string_view p_vertex,
                                      std::string_view p_fragment)
 {
-    GPU_TRY_ASSIGN(vertex, Shader::fromSource(ShaderStage::Vertex, p_vertex));
-    GPU_TRY_ASSIGN(fragment,
-                   Shader::fromSource(ShaderStage::Fragment, p_fragment));
+    Shader vertex;
+    Shader fragment;
+    COMPAGES_TRY_ASSIGN(vertex, Shader::fromSource(ShaderStage::Vertex, p_vertex));
+    COMPAGES_TRY_ASSIGN(fragment,
+                        Shader::fromSource(ShaderStage::Fragment, p_fragment));
     return link({ &vertex, &fragment });
 }
 
@@ -306,24 +317,58 @@ Result<Program> Program::fromSources(std::string_view p_vertex,
 Result<Program> Program::fromFiles(std::string const& p_vertex,
                                    std::string const& p_fragment)
 {
-    GPU_TRY_ASSIGN(vertex, Shader::fromFile(ShaderStage::Vertex, p_vertex));
-    GPU_TRY_ASSIGN(fragment,
-                   Shader::fromFile(ShaderStage::Fragment, p_fragment));
+    Shader vertex;
+    Shader fragment;
+    COMPAGES_TRY_ASSIGN(vertex, Shader::fromFile(ShaderStage::Vertex, p_vertex));
+    COMPAGES_TRY_ASSIGN(fragment,
+                        Shader::fromFile(ShaderStage::Fragment, p_fragment));
     return link({ &vertex, &fragment });
 }
 
 //------------------------------------------------------------------------------
 Result<Program> Program::fromComputeSource(std::string_view p_source)
 {
-    GPU_TRY_ASSIGN(compute, Shader::fromSource(ShaderStage::Compute, p_source));
+    Shader compute;
+    COMPAGES_TRY_ASSIGN(compute,
+                        Shader::fromSource(ShaderStage::Compute, p_source));
     return link({ &compute });
 }
 
 //------------------------------------------------------------------------------
 Result<Program> Program::fromComputeFile(std::string const& p_path)
 {
-    GPU_TRY_ASSIGN(compute, Shader::fromFile(ShaderStage::Compute, p_path));
+    Shader compute;
+    COMPAGES_TRY_ASSIGN(compute, Shader::fromFile(ShaderStage::Compute, p_path));
     return link({ &compute });
+}
+
+//------------------------------------------------------------------------------
+Status Program::load(std::string_view p_vertex, std::string_view p_fragment)
+{
+    COMPAGES_TRY_ASSIGN(*this, fromSources(p_vertex, p_fragment));
+    return success();
+}
+
+//------------------------------------------------------------------------------
+Status Program::loadFiles(std::string const& p_vertex,
+                          std::string const& p_fragment)
+{
+    COMPAGES_TRY_ASSIGN(*this, fromFiles(p_vertex, p_fragment));
+    return success();
+}
+
+//------------------------------------------------------------------------------
+Status Program::loadCompute(std::string_view p_source)
+{
+    COMPAGES_TRY_ASSIGN(*this, fromComputeSource(p_source));
+    return success();
+}
+
+//------------------------------------------------------------------------------
+Status Program::loadComputeFile(std::string const& p_path)
+{
+    COMPAGES_TRY_ASSIGN(*this, fromComputeFile(p_path));
+    return success();
 }
 
 //------------------------------------------------------------------------------
@@ -377,6 +422,12 @@ ProgramReflection const& Program::reflection() const
     static const ProgramReflection nothing;
     detail::ProgramRecord const* record = detail::pools().programs.get(m_handle);
     return (record == nullptr) ? nothing : record->reflection;
+}
+
+//------------------------------------------------------------------------------
+bool Program::has(std::string_view p_name) const
+{
+    return reflection().uniform(p_name) != nullptr;
 }
 
 //------------------------------------------------------------------------------
@@ -443,53 +494,57 @@ Result<int> Program::locationOf(std::string_view p_name,
 #define GPU_SET_UNIFORM(name, type, data)                                    \
     do                                                                       \
     {                                                                        \
-        GPU_TRY_ASSIGN(location, locationOf(name, type));                    \
+        auto location = locationOf(name, type);                              \
+        if (!location)                                                       \
+        {                                                                    \
+            reportError(location.error());                                   \
+            return;                                                          \
+        }                                                                    \
         backend::setUniform(                                                 \
             detail::pools().programs.get(m_handle)->native,                  \
-            location,                                                        \
+            location.value(),                                                \
             type,                                                            \
             data);                                                           \
-        return success();                                                    \
     } while (false)
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, float p_value)
+void Program::set(std::string_view p_name, float p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::Float, &p_value);
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Vector2f const& p_value)
+void Program::set(std::string_view p_name, Vector2f const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::Vec2, p_value.data());
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Vector3f const& p_value)
+void Program::set(std::string_view p_name, Vector3f const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::Vec3, p_value.data());
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Vector4f const& p_value)
+void Program::set(std::string_view p_name, Vector4f const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::Vec4, p_value.data());
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, int p_value)
+void Program::set(std::string_view p_name, int p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::Int, &p_value);
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, unsigned int p_value)
+void Program::set(std::string_view p_name, unsigned int p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::UInt, &p_value);
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, bool p_value)
+void Program::set(std::string_view p_name, bool p_value)
 {
     // GLSL has a bool type but the driver is given an int, since a C++ bool is
     // one byte and the shader expects four.
@@ -498,39 +553,60 @@ Status Program::set(std::string_view p_name, bool p_value)
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Vector2i const& p_value)
+void Program::set(std::string_view p_name, Vector2i const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::IVec2, p_value.data());
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Vector3i const& p_value)
+void Program::set(std::string_view p_name, Vector3i const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::IVec3, p_value.data());
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Vector4i const& p_value)
+void Program::set(std::string_view p_name, Vector4i const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::IVec4, p_value.data());
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Matrix22f const& p_value)
+void Program::set(std::string_view p_name, Matrix22f const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::Mat2, p_value.data());
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Matrix33f const& p_value)
+void Program::set(std::string_view p_name, Matrix33f const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::Mat3, p_value.data());
 }
 
 //------------------------------------------------------------------------------
-Status Program::set(std::string_view p_name, Matrix44f const& p_value)
+void Program::set(std::string_view p_name, Matrix44f const& p_value)
 {
     GPU_SET_UNIFORM(p_name, DataType::Mat4, p_value.data());
+}
+
+//------------------------------------------------------------------------------
+void Program::set(std::string_view p_name, std::span<const Matrix44f> p_values)
+{
+    auto location = locationOf(p_name, DataType::Mat4);
+    if (!location)
+    {
+        reportError(location.error());
+        return;
+    }
+    if (p_values.empty())
+    {
+        return;
+    }
+    backend::setUniformArray(
+        detail::pools().programs.get(m_handle)->native,
+        location.value(),
+        DataType::Mat4,
+        p_values.data()->data(),
+        static_cast<int>(p_values.size()));
 }
 
 #undef GPU_SET_UNIFORM

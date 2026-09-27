@@ -1,25 +1,25 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/Pipeline.hpp"
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Pipeline.hpp"
+#include "Compages/GPU/Device.hpp"
 #include "GPU/Internal/Pools.hpp"
 
 #include <algorithm>
@@ -150,9 +150,9 @@ Result<std::vector<backend::VertexAttribute>> matchAttributes(
                 "' of type " + toString(wanted.type) +
                 ", which this vertex does not have. It offers: " +
                 namesOf(p_layout) +
-                ".\nThe names have to be the same on both sides. Either rename "
-                "the attribute in the shader, or pass the name the shader uses "
-                "to gpu::field(), as in gpu::field(&Vertex::position, \"" +
+                ".\nThe name of a field is the name of the attribute it feeds. "
+                "Either rename one of them, or say which field feeds it, as in "
+                "gpu::VertexLayout::of<Vertex>().rename(\"position\", \"" +
                 wanted.name + "\")");
         }
 
@@ -175,7 +175,7 @@ Result<std::vector<backend::VertexAttribute>> matchAttributes(
                 "so declare them separately in the shader");
         }
 
-        matched.push_back(backend::VertexAttribute{ wanted.location,
+        matched.emplace_back(backend::VertexAttribute{ wanted.location,
                                                     field->format,
                                                     field->offset,
                                                     field->per_instance });
@@ -245,7 +245,7 @@ Result<Pipeline> Pipeline::create(Program const& p_program,
 
     // Whatever can be known about the layout on its own: no field running past
     // the end of the vertex, no two fields overlapping, no repeated name.
-    GPU_TRY(p_layout.validate());
+    COMPAGES_TRY(p_layout.validate());
 
     ProgramReflection const& reflection = program->reflection;
 
@@ -269,7 +269,12 @@ Result<Pipeline> Pipeline::create(Program const& p_program,
             "a full screen quad, takes a default constructed gpu::VertexLayout");
     }
 
-    GPU_TRY_ASSIGN(attributes, matchAttributes(reflection, p_layout));
+    auto attributes_result = matchAttributes(reflection, p_layout);
+    if (!attributes_result)
+    {
+        return compages::failure(attributes_result.error());
+    }
+    auto attributes = attributes_result.take();
 
     // Wireframe of a primitive that has no faces to outline draws the same thing
     // either way, which is confusing enough to be worth saying.
@@ -281,8 +286,12 @@ Result<Pipeline> Pipeline::create(Program const& p_program,
                        " means nothing: a point has no edges and no faces");
     }
 
-    GPU_TRY_ASSIGN(reader,
-                   backend::acquireVertexReader(attributes, p_layout.stride()));
+    auto reader_result = backend::acquireVertexReader(attributes, p_layout.stride());
+    if (!reader_result)
+    {
+        return compages::failure(reader_result.error());
+    }
+    auto reader = reader_result.take();
 
     detail::PipelineRecord record;
     record.reader = reader;
@@ -494,6 +503,18 @@ void forgetRenderState()
     {
         backend::forgetRenderState();
     }
+}
+
+//------------------------------------------------------------------------------
+void showWireframe(bool p_enabled)
+{
+    backend::showWireframe(p_enabled);
+}
+
+//------------------------------------------------------------------------------
+bool wireframeShown()
+{
+    return backend::wireframeShown();
 }
 
 } // namespace gpu

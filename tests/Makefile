@@ -1,21 +1,21 @@
 ##=====================================================================
-## OpenGLCppWrapper: A C++20 OpenGL wrapper.
+## Compages: A C++20 OpenGL wrapper.
 ## Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 ##
-## This file is part of OpenGLCppWrapper.
+## This file is part of Compages.
 ##
-## OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+## Compages is free software: you can redistribute it and/or modify it
 ## under the terms of the GNU General Public License as published by
 ## the Free Software Foundation, either version 3 of the License, or
 ## (at your option) any later version.
 ##
-## OpenGLCppWrapper is distributed in the hope that it will be useful, but
+## Compages is distributed in the hope that it will be useful, but
 ## WITHOUT ANY WARRANTY; without even the implied warranty of
 ## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ## General Public License for more details.
 ##
 ## You should have received a copy of the GNU General Public License
-## along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+## along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 ##=====================================================================
 
 ###################################################
@@ -43,11 +43,13 @@ include $(M)/project/Makefile
 SRC_FILES := $(filter-out $(P)/src/GPU/Backends/%,$(call rwildcard,$(P)/src,*.cpp)) \
     $(call rwildcard,$(P)/src/GPU/Backends/$(GPU_BACKEND),*.cpp) \
     $(call rwildcard,$(P)/tests,*.cpp)
-INCLUDES := $(P)/tests $(P)/src $(THIRD_PARTIES_DIR)
+INCLUDES := $(P)/tests $(P)/include $(P)/src $(THIRD_PARTIES_DIR)
 INCLUDES += $(THIRD_PARTIES_DIR)/units/include
 INCLUDES += $(THIRD_PARTIES_DIR)/stb
 INCLUDES += $(THIRD_PARTIES_DIR)/cgltf
 INCLUDES += $(THIRD_PARTIES_DIR)/json/include
+INCLUDES += $(THIRD_PARTIES_DIR)/entt/src
+INCLUDES += $(THIRD_PARTIES_DIR)/pugixml/src
 INCLUDES += $(P)/src/GPU/Backends/$(GPU_BACKEND)/glad/include
 VPATH := $(P)/tests $(P)/src
 DEFINES += -DGPU_BACKEND_$(GPU_BACKEND)

@@ -1,25 +1,25 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/Buffer.hpp"
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Buffer.hpp"
+#include "Compages/GPU/Device.hpp"
 #include "GPU/Internal/Pools.hpp"
 
 #include <cassert>
@@ -100,8 +100,12 @@ Result<BufferHandle> createBuffer(std::size_t p_bytes,
         }
     }
 
-    GPU_TRY_ASSIGN(native,
-                   backend::createBuffer(p_bytes, p_data, p_kind, p_usage));
+    auto native_result = backend::createBuffer(p_bytes, p_data, p_kind, p_usage);
+    if (!native_result)
+    {
+        return compages::failure(native_result.error());
+    }
+    auto native = native_result.take();
 
     auto added = pools().buffers.add(
         BufferRecord{ native, p_bytes, p_kind, p_usage });

@@ -1,21 +1,21 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
 #include "Common/Window.hpp"
@@ -25,21 +25,16 @@
 namespace examples
 {
 
-namespace
-{
-
 //------------------------------------------------------------------------------
 //! \brief What GLFW says when it cannot do something, which is more use than
 //! anything this file could invent.
 //------------------------------------------------------------------------------
-std::string glfwReason()
+static std::string glfwReason()
 {
     const char* why = nullptr;
     glfwGetError(&why);
     return (why == nullptr) ? "no reason given" : why;
 }
-
-} // namespace
 
 //------------------------------------------------------------------------------
 gpu::Status Window::open(std::string const& p_title, int p_width, int p_height)
@@ -80,7 +75,7 @@ gpu::Status Window::open(std::string const& p_title, int p_width, int p_height)
     // The library gets a loader, never a window. This one line is the whole of
     // what ties src/GPU to a windowing library, and it is on this side of the
     // boundary.
-    GPU_TRY(gpu::init(reinterpret_cast<gpu::LoadProc>(glfwGetProcAddress)));
+    COMPAGES_TRY(gpu::init(reinterpret_cast<gpu::LoadProc>(glfwGetProcAddress)));
     m_device_ready = true;
 
     m_last_time = glfwGetTime();
@@ -203,6 +198,38 @@ bool Window::keyDown(int p_glfw_key) const
 {
     return (m_window != nullptr) &&
            (glfwGetKey(m_window, p_glfw_key) == GLFW_PRESS);
+}
+
+//------------------------------------------------------------------------------
+void Window::captureMouse(bool p_captured)
+{
+    if ((m_window == nullptr) || (p_captured == m_mouse_captured))
+    {
+        return;
+    }
+    m_mouse_captured = p_captured;
+    glfwSetInputMode(m_window, GLFW_CURSOR,
+                     p_captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    if (p_captured)
+    {
+        glfwSetCursor(m_window, nullptr);
+    }
+    if (glfwRawMouseMotionSupported() == GLFW_TRUE)
+    {
+        glfwSetInputMode(m_window, GLFW_RAW_MOUSE_MOTION, p_captured ? GLFW_TRUE : GLFW_FALSE);
+    }
+    // The pointer jumps when it is hidden or shown: that is not a motion.
+    m_mouse_seen = false;
+}
+
+//------------------------------------------------------------------------------
+void Window::vsync(bool p_enabled)
+{
+    m_vsync = p_enabled;
+    if (m_window != nullptr)
+    {
+        glfwSwapInterval(p_enabled ? 1 : 0);
+    }
 }
 
 //------------------------------------------------------------------------------

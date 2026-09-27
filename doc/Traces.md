@@ -14,8 +14,8 @@ above, and the two together are the whole story.
 For call-by-call inspection of what actually reached the driver:
 
 ```sh
-apitrace trace --api gl build/OpenGLCppWrapper-examples 05_IndexedCube
-qapitrace OpenGLCppWrapper-examples.trace
+apitrace trace --api gl build/Compages-examples 05_IndexedCube
+qapitrace Compages-examples.trace
 ```
 
 Older traces stack up next to the binary. Delete the previous one, or
@@ -26,7 +26,7 @@ See [apitrace](https://github.com/apitrace/apitrace) for the tool itself.
 ## RenderDoc
 
 RenderDoc works too, and gives a per-draw view of state, shaders and the
-attached targets. Point it at `build/OpenGLCppWrapper-examples`; the
+attached targets. Point it at `build/Compages-examples`; the
 gallery's ImGui overlay is drawn by ImGui's own backend after the library's
 own state has been flushed with `gpu::forgetRenderState()`, so it does not
 interfere with what RenderDoc captures for the example itself.

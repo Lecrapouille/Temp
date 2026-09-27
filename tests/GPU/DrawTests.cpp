@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,12 +15,12 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "GPUContext.hpp"
 
-#include "GPU/GPU.hpp"
+#include "Compages/GPU/GPU.hpp"
 
 #include <vector>
 
@@ -144,7 +144,7 @@ protected:
         m_program = gpu::Program::fromSources(VERTEX, RED_FRAGMENT).take();
         ASSERT_TRUE(m_program.valid());
 
-        m_layout = GPU_LAYOUT(Corner, position);
+        m_layout = gpu::VertexLayout::of<Corner>();
     }
 
     void TearDown() override
@@ -225,14 +225,24 @@ TEST_F(DrawTest, ClosesThePassWhenItGoesOutOfScope)
 }
 
 //------------------------------------------------------------------------------
-TEST_F(DrawTest, RefusesToNestPasses)
+// A pass opened over another suspends it; closing it resumes the one below,
+// which is how the window hosts a pass drawing into a texture.
+//------------------------------------------------------------------------------
+TEST_F(DrawTest, NestsPassesAndResumesTheOneBelow)
 {
-    auto first = gpu::RenderPass::begin(wholeTarget());
-    ASSERT_TRUE(bool(first)) << first.error();
-
-    auto second = gpu::RenderPass::begin(wholeTarget());
-    ASSERT_FALSE(bool(second));
-    ASSERT_THAT(second.error(), HasSubstr("already open"));
+    auto outer = gpu::RenderPass::begin(wholeTarget());
+    ASSERT_TRUE(bool(outer)) << outer.error();
+    {
+        gpu::PassDesc half = wholeTarget();
+        half.width = WIDTH / 2u;
+        auto inner = gpu::RenderPass::begin(half);
+        ASSERT_TRUE(bool(inner)) << inner.error();
+        ASSERT_EQ(gpu::currentPass().width, WIDTH / 2u);
+    }
+    ASSERT_TRUE(gpu::inRenderPass());
+    ASSERT_EQ(gpu::currentPass().width, WIDTH);
+    outer.value().end();
+    ASSERT_FALSE(gpu::inRenderPass());
 }
 
 //------------------------------------------------------------------------------
@@ -263,12 +273,28 @@ TEST_F(DrawTest, DrawsATriangleThatReallyLandsOnTheTarget)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::draw(pipeline(), vertices);
+    auto drawn = gpu::attempt([&] { gpu::draw(pipeline(), vertices); });
     ASSERT_TRUE(bool(drawn)) << drawn.error();
 
     auto picture = gpu::readPixels();
     ASSERT_TRUE(bool(picture)) << picture.error();
     ASSERT_EQ(pixelAt(picture.value(), WIDTH / 2u, HEIGHT / 2u), RED);
+}
+
+//------------------------------------------------------------------------------
+TEST_F(DrawTest, AcceptsTheExplicitPassContract)
+{
+    auto vertices =
+        gpu::Buffer<Corner>::from(BIG_TRIANGLE,
+                                  gpu::BufferKind::Vertex,
+                                  gpu::BufferUsage::Immutable)
+            .take();
+    auto pass = gpu::RenderPass::begin(wholeTarget());
+    ASSERT_TRUE(bool(pass)) << pass.error();
+
+    auto drawn = gpu::attempt([&] { gpu::draw(
+        pass.value(), pipeline(), vertices, gpu::DrawOptions{}); });
+    ASSERT_TRUE(bool(drawn)) << drawn.error();
 }
 
 //------------------------------------------------------------------------------
@@ -289,7 +315,7 @@ TEST_F(DrawTest, LeavesAloneWhatItDoesNotCover)
 
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
-    ASSERT_TRUE(bool(gpu::draw(pipeline(), vertices)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline(), vertices); })));
 
     auto picture = gpu::readPixels();
     ASSERT_TRUE(bool(picture)) << picture.error();
@@ -316,7 +342,7 @@ TEST_F(DrawTest, DrawsFromIndicesNamingTheCorners)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawIndexed(pipeline(), vertices, indices);
+    auto drawn = gpu::attempt([&] { gpu::drawIndexed(pipeline(), vertices, indices); });
     ASSERT_TRUE(bool(drawn)) << drawn.error();
 
     auto picture = gpu::readPixels();
@@ -340,7 +366,7 @@ TEST_F(DrawTest, DrawsWithNoVertexDataAtAll)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawWithoutVertices(created.value(), 3u);
+    auto drawn = gpu::attempt([&] { gpu::drawWithoutVertices(created.value(), 3u); });
     ASSERT_TRUE(bool(drawn)) << drawn.error();
 
     auto picture = gpu::readPixels();
@@ -357,7 +383,7 @@ TEST_F(DrawTest, RefusesToDrawWithoutVerticesWhenTheShaderWantsThem)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawWithoutVertices(pipeline(), 3u);
+    auto drawn = gpu::attempt([&] { gpu::drawWithoutVertices(pipeline(), 3u); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("nowhere for them to come from"));
 }
@@ -374,7 +400,7 @@ TEST_F(DrawTest, RefusesToDrawOutsideAPass)
                                               gpu::BufferUsage::Immutable)
                         .take();
 
-    auto drawn = gpu::draw(pipeline(), vertices);
+    auto drawn = gpu::attempt([&] { gpu::draw(pipeline(), vertices); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("no pass is open"));
 }
@@ -393,7 +419,7 @@ TEST_F(DrawTest, RefusesACountThatDoesNotMakeWholeTriangles)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::draw(pipeline(), vertices);
+    auto drawn = gpu::attempt([&] { gpu::draw(pipeline(), vertices); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("1 would be left over"));
 }
@@ -412,8 +438,8 @@ TEST_F(DrawTest, AcceptsFourVerticesAsAStrip)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::draw(
-        pipeline({ .primitive = gpu::Primitive::TriangleStrip }), vertices);
+    auto drawn = gpu::attempt([&] { gpu::draw(
+        pipeline({ .primitive = gpu::Primitive::TriangleStrip }), vertices); });
     ASSERT_TRUE(bool(drawn)) << drawn.error();
 }
 
@@ -428,7 +454,7 @@ TEST_F(DrawTest, RefusesToReadPastTheEndOfABuffer)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::draw(pipeline(), vertices.handle(), 6u);
+    auto drawn = gpu::attempt([&] { gpu::draw(pipeline(), vertices.handle(), 6u); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("the buffer holds 3"));
 }
@@ -448,7 +474,7 @@ TEST_F(DrawTest, RefusesABufferOfTheWrongKind)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::draw(pipeline(), indices.handle(), 3u);
+    auto drawn = gpu::attempt([&] { gpu::draw(pipeline(), indices.handle(), 3u); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("created to hold index data"));
 }
@@ -464,11 +490,11 @@ TEST_F(DrawTest, RefusesVerticesGivenAsIndices)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawIndexed(pipeline(),
+    auto drawn = gpu::attempt([&] { gpu::drawIndexed(pipeline(),
                                   vertices.handle(),
                                   vertices.handle(),
                                   gpu::IndexType::UInt16,
-                                  6u);
+                                  6u); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("BufferKind::Index"));
 }
@@ -484,24 +510,24 @@ TEST_F(DrawTest, RefusesADrawOfNothing)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::draw(pipeline(), vertices.handle(), 0u);
+    auto drawn = gpu::attempt([&] { gpu::draw(pipeline(), vertices.handle(), 0u); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("never computed"));
 }
 
 //------------------------------------------------------------------------------
-// A vertex array sends whatever changed on the way to the draw, which is the one
+// A buffer kept on the CPU sends whatever changed on the way to the draw, which is the one
 // call an example animating its vertices needs.
 //------------------------------------------------------------------------------
-TEST_F(DrawTest, SendsWhatChangedBeforeDrawingAVertexArray)
+TEST_F(DrawTest, SendsWhatChangedBeforeDrawingAGrowingBuffer)
 {
-    gpu::VertexArray<Corner> corners{ std::span<const Corner>(BIG_TRIANGLE) };
+    gpu::Buffer<Corner> corners{ std::span<const Corner>(BIG_TRIANGLE) };
     ASSERT_TRUE(corners.dirty());
 
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::draw(pipeline(), corners);
+    auto drawn = gpu::attempt([&] { gpu::draw(pipeline(), corners); });
     ASSERT_TRUE(bool(drawn)) << drawn.error();
     ASSERT_FALSE(corners.dirty());
 
@@ -547,10 +573,10 @@ void main() { gl_Position = vec4(position, 0.5, 1.0); }
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    ASSERT_TRUE(bool(gpu::draw(nearer, vertices)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(nearer, vertices); })));
     // The far one comes second and must lose, which is only true if the distance
     // the first one recorded was kept.
-    ASSERT_TRUE(bool(gpu::draw(farther, vertices)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(farther, vertices); })));
 
     auto picture = gpu::readPixels();
     ASSERT_TRUE(bool(picture)) << picture.error();
@@ -577,8 +603,8 @@ TEST_F(DrawTest, DropsTheTrianglesFacingAway)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    ASSERT_TRUE(bool(gpu::draw(pipeline({ .cull = gpu::CullMode::Back }),
-                               vertices)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline({ .cull = gpu::CullMode::Back }),
+                               vertices); })));
 
     auto picture = gpu::readPixels();
     ASSERT_TRUE(bool(picture)) << picture.error();
@@ -609,7 +635,7 @@ TEST_F(DrawTest, DrawsIntoOnlyPartOfTheTarget)
                                              .clear_depth = false,
                                              .target = {} });
         ASSERT_TRUE(bool(half)) << half.error();
-        ASSERT_TRUE(bool(gpu::draw(pipeline(), vertices)));
+        ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline(), vertices); })));
 
         // Reading beyond the pass is refused, since the pass is what says where
         // the picture is.
@@ -652,14 +678,14 @@ TEST_F(DrawTest, DrawsTheSameAfterForgettingWhatTheDeviceWasTold)
     {
         auto pass = gpu::RenderPass::begin(wholeTarget());
         ASSERT_TRUE(bool(pass)) << pass.error();
-        ASSERT_TRUE(bool(gpu::draw(pipeline(), vertices)));
+        ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline(), vertices); })));
     }
 
     gpu::forgetRenderState();
 
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
-    ASSERT_TRUE(bool(gpu::draw(pipeline(), vertices)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline(), vertices); })));
 
     auto picture = gpu::readPixels();
     ASSERT_TRUE(bool(picture)) << picture.error();
@@ -740,7 +766,7 @@ TEST_F(DrawTest, KeepsWhatIsDrawnInsideItsOwnPart)
                                              .clear_depth = false,
                                              .target = {} });
         ASSERT_TRUE(bool(left)) << left.error();
-        ASSERT_TRUE(bool(gpu::draw(pipeline(), vertices)));
+        ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline(), vertices); })));
     }
 
     auto whole = gpu::RenderPass::begin({ .width = WIDTH,
@@ -773,8 +799,8 @@ TEST_F(DrawTest, CountsTheWorkOfAFrame)
     {
         auto pass = gpu::RenderPass::begin(wholeTarget());
         ASSERT_TRUE(bool(pass)) << pass.error();
-        ASSERT_TRUE(bool(gpu::draw(pipeline(), vertices)));
-        ASSERT_TRUE(bool(gpu::draw(m_pipeline, vertices)));
+        ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline(), vertices); })));
+        ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(m_pipeline, vertices); })));
     }
 
     ASSERT_EQ(gpu::frameStatistics().passes, 1u);
@@ -849,7 +875,7 @@ TEST_F(DrawTest, RefusesABufferOfTheWrongVertex)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::draw(pipeline(), wrong);
+    auto drawn = gpu::attempt([&] { gpu::draw(pipeline(), wrong); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("built for another vertex struct"));
 }
@@ -916,7 +942,7 @@ void main() { oColor = vColor; }
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawInstanced(drawing, instances, 4u, sprites.size());
+    auto drawn = gpu::attempt([&] { gpu::drawInstanced(drawing, instances, 4u, sprites.size()); });
     ASSERT_TRUE(bool(drawn)) << drawn.error();
 
     ASSERT_EQ(gpu::frameStatistics().draw_calls, 1u);
@@ -940,7 +966,7 @@ TEST_F(DrawTest, RefusesADrawOfZeroInstances)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawInstanced(pipeline(), vertices, 3u, 0u);
+    auto drawn = gpu::attempt([&] { gpu::drawInstanced(pipeline(), vertices, 3u, 0u); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("zero instances"));
 }
@@ -979,7 +1005,7 @@ void main()
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawInstanced(drawing, instances, 3u, 2u);
+    auto drawn = gpu::attempt([&] { gpu::drawInstanced(drawing, instances, 3u, 2u); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("holds 1"));
 }
@@ -1005,7 +1031,7 @@ TEST_F(DrawTest, DrawsWhatTheCommandBufferAsks)
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawIndirect(pipeline(), vertices, commands);
+    auto drawn = gpu::attempt([&] { gpu::drawIndirect(pipeline(), vertices, commands); });
     ASSERT_TRUE(bool(drawn)) << drawn.error();
 
     auto picture = gpu::readPixels();
@@ -1028,7 +1054,7 @@ TEST_F(DrawTest, RefusesACommandBufferThatIsTooSmall)
     ASSERT_TRUE(bool(pass)) << pass.error();
 
     auto drawn =
-        gpu::drawIndirect(pipeline(), vertices.handle(), too_small.handle());
+        gpu::attempt([&] { gpu::drawIndirect(pipeline(), vertices.handle(), too_small.handle()); });
     ASSERT_FALSE(bool(drawn));
     ASSERT_THAT(drawn.error(), HasSubstr("16 bytes"));
 }
@@ -1078,7 +1104,7 @@ void main()
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
 
-    auto drawn = gpu::drawIndirect(pipeline(), vertices, commands);
+    auto drawn = gpu::attempt([&] { gpu::drawIndirect(pipeline(), vertices, commands); });
     ASSERT_TRUE(bool(drawn)) << drawn.error();
 
     auto picture = gpu::readPixels();

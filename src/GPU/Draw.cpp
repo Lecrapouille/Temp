@@ -1,28 +1,29 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/Draw.hpp"
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Draw.hpp"
+#include "Compages/GPU/Device.hpp"
+#include "Compages/GPU/Errors.hpp"
 #include "GPU/Internal/Pools.hpp"
 #include "GPU/Internal/Statistics.hpp"
-#include "GPU/RenderPass.hpp"
+#include "Compages/GPU/RenderPass.hpp"
 
 namespace gpu
 {
@@ -181,20 +182,31 @@ Status vertexSourceFits(detail::PipelineRecord const& p_pipeline,
 } // namespace
 
 //------------------------------------------------------------------------------
-Status draw(Pipeline const& p_pipeline,
+void draw(Pipeline const& p_pipeline,
             BufferHandle p_vertices,
             std::size_t p_count,
             std::size_t p_first)
 {
-    GPU_TRY_ASSIGN(ready, readyToDraw(p_pipeline));
+    auto ready_ = readyToDraw(p_pipeline);
+    if (!ready_)
+    {
+        return reportError(ready_.error());
+    }
+    auto const ready = ready_.value();
 
     if (p_count == 0u)
     {
-        return failure("a draw of zero vertices is almost always a count that "
+        return reportError("a draw of zero vertices is almost always a count that "
                        "was never computed. Skip the draw instead");
     }
-    GPU_TRY(wholePrimitives(ready.pipeline->state.primitive, p_count));
-    GPU_TRY(vertexSourceFits(*ready.pipeline, p_vertices, p_count, p_first));
+    if (!check(wholePrimitives(ready.pipeline->state.primitive, p_count)))
+    {
+        return;
+    }
+    if (!check(vertexSourceFits(*ready.pipeline, p_vertices, p_count, p_first)))
+    {
+        return;
+    }
 
     detail::BufferRecord const* buffer =
         detail::pools().buffers.get(p_vertices);
@@ -206,35 +218,43 @@ Status draw(Pipeline const& p_pipeline,
     backend::draw(ready.pipeline->state.primitive, p_first, p_count);
 
     detail::countDraw(p_count, 1u);
-    return success();
+    return;
 }
 
 //------------------------------------------------------------------------------
-Status drawIndexed(Pipeline const& p_pipeline,
+void drawIndexed(Pipeline const& p_pipeline,
                    BufferHandle p_vertices,
                    BufferHandle p_indices,
                    IndexType p_type,
                    std::size_t p_count,
                    std::size_t p_first)
 {
-    GPU_TRY_ASSIGN(ready, readyToDraw(p_pipeline));
+    auto ready_ = readyToDraw(p_pipeline);
+    if (!ready_)
+    {
+        return reportError(ready_.error());
+    }
+    auto const ready = ready_.value();
 
     if (p_count == 0u)
     {
-        return failure("a draw of zero indices is almost always a count that was "
+        return reportError("a draw of zero indices is almost always a count that was "
                        "never computed. Skip the draw instead");
     }
-    GPU_TRY(wholePrimitives(ready.pipeline->state.primitive, p_count));
+    if (!check(wholePrimitives(ready.pipeline->state.primitive, p_count)))
+    {
+        return;
+    }
 
     detail::BufferRecord const* indices =
         detail::pools().buffers.get(p_indices);
     if (indices == nullptr)
     {
-        return failure("the buffer holding the indices no longer exists");
+        return reportError("the buffer holding the indices no longer exists");
     }
     if (indices->kind != BufferKind::Index)
     {
-        return failure(
+        return reportError(
             std::string("the buffer given as indices was created to hold ") +
             toString(indices->kind) +
             " data. An index buffer has to be created with "
@@ -244,7 +264,7 @@ Status drawIndexed(Pipeline const& p_pipeline,
     const std::size_t held = indices->bytes / sizeOf(p_type);
     if (p_first + p_count > held)
     {
-        return failure("the draw asks for " + std::to_string(p_count) +
+        return reportError("the draw asks for " + std::to_string(p_count) +
                        " indices starting at " + std::to_string(p_first) +
                        ", but the buffer holds " + std::to_string(held) + " of " +
                        std::to_string(sizeOf(p_type)) + " bytes each");
@@ -258,12 +278,12 @@ Status drawIndexed(Pipeline const& p_pipeline,
         detail::pools().buffers.get(p_vertices);
     if (vertices == nullptr)
     {
-        return failure("the buffer holding the vertices no longer exists");
+        return reportError("the buffer holding the vertices no longer exists");
     }
     if ((vertices->kind != BufferKind::Vertex) &&
         (vertices->kind != BufferKind::Storage))
     {
-        return failure(
+        return reportError(
             std::string("the buffer given as vertices was created to hold ") +
             toString(vertices->kind) +
             " data. A vertex buffer, or a storage buffer a compute pass just "
@@ -271,7 +291,7 @@ Status drawIndexed(Pipeline const& p_pipeline,
     }
     if (ready.pipeline->layout.stride() == 0u)
     {
-        return failure(
+        return reportError(
             "this pipeline was built for a shader that generates its own "
             "vertices, so indices have nothing to name");
     }
@@ -286,24 +306,32 @@ Status drawIndexed(Pipeline const& p_pipeline,
         ready.pipeline->state.primitive, p_type, p_first, p_count);
 
     detail::countDraw(p_count, 1u);
-    return success();
+    return;
 }
 
 //------------------------------------------------------------------------------
-Status drawWithoutVertices(Pipeline const& p_pipeline, std::size_t p_count)
+void drawWithoutVertices(Pipeline const& p_pipeline, std::size_t p_count)
 {
-    GPU_TRY_ASSIGN(ready, readyToDraw(p_pipeline));
+    auto ready_ = readyToDraw(p_pipeline);
+    if (!ready_)
+    {
+        return reportError(ready_.error());
+    }
+    auto const ready = ready_.value();
 
     if (p_count == 0u)
     {
-        return failure("a draw of zero vertices is almost always a count that "
+        return reportError("a draw of zero vertices is almost always a count that "
                        "was never computed. Skip the draw instead");
     }
-    GPU_TRY(wholePrimitives(ready.pipeline->state.primitive, p_count));
+    if (!check(wholePrimitives(ready.pipeline->state.primitive, p_count)))
+    {
+        return;
+    }
 
     if (!ready.pipeline->attributes.empty())
     {
-        return failure(
+        return reportError(
             "this pipeline reads " +
             std::to_string(ready.pipeline->attributes.size()) +
             " vertex attributes, so there is nowhere for them to come from. "
@@ -317,41 +345,55 @@ Status drawWithoutVertices(Pipeline const& p_pipeline, std::size_t p_count)
     backend::draw(ready.pipeline->state.primitive, 0u, p_count);
 
     detail::countDraw(p_count, 1u);
-    return success();
+    return;
 }
 
 //------------------------------------------------------------------------------
-Status drawInstanced(Pipeline const& p_pipeline,
+void drawInstanced(Pipeline const& p_pipeline,
                      BufferHandle p_vertices,
                      std::size_t p_vertex_count,
                      std::size_t p_instances,
                      std::size_t p_first)
 {
-    GPU_TRY_ASSIGN(ready, readyToDraw(p_pipeline));
+    auto ready_ = readyToDraw(p_pipeline);
+    if (!ready_)
+    {
+        return reportError(ready_.error());
+    }
+    auto const ready = ready_.value();
 
     if (p_instances == 0u)
     {
-        return failure(
+        return reportError(
             "a draw of zero instances draws nothing. Skip it instead");
     }
     if (p_vertex_count == 0u)
     {
-        return failure("a draw of zero vertices is almost always a count that "
+        return reportError("a draw of zero vertices is almost always a count that "
                        "was never computed. Skip the draw instead");
     }
-    GPU_TRY(wholePrimitives(ready.pipeline->state.primitive, p_vertex_count));
+    if (!check(wholePrimitives(ready.pipeline->state.primitive, p_vertex_count)))
+    {
+        return;
+    }
 
     if (p_pipeline.instanced())
     {
         // The buffer holds one record per object, not one per corner. Four
         // vertices and a hundred thousand instances is four corners generated
         // from gl_VertexID and a hundred thousand sprites in the buffer.
-        GPU_TRY(vertexSourceFits(*ready.pipeline, p_vertices, p_instances, 0u));
+        if (!check(vertexSourceFits(*ready.pipeline, p_vertices, p_instances, 0u)))
+        {
+            return;
+        }
     }
     else
     {
-        GPU_TRY(vertexSourceFits(
-            *ready.pipeline, p_vertices, p_vertex_count, p_first));
+        if (!check(vertexSourceFits(
+            *ready.pipeline, p_vertices, p_vertex_count, p_first)))
+        {
+            return;
+        }
     }
 
     detail::BufferRecord const* buffer =
@@ -367,27 +409,35 @@ Status drawInstanced(Pipeline const& p_pipeline,
                            p_instances);
 
     detail::countDraw(p_vertex_count * p_instances, p_instances);
-    return success();
+    return;
 }
 
 //------------------------------------------------------------------------------
-Status drawIndirect(Pipeline const& p_pipeline,
+void drawIndirect(Pipeline const& p_pipeline,
                     BufferHandle p_vertices,
                     BufferHandle p_commands)
 {
-    GPU_TRY_ASSIGN(ready, readyToDraw(p_pipeline));
+    auto ready_ = readyToDraw(p_pipeline);
+    if (!ready_)
+    {
+        return reportError(ready_.error());
+    }
+    auto const ready = ready_.value();
 
-    GPU_TRY(vertexSourceFits(*ready.pipeline, p_vertices, 1u, 0u));
+    if (!check(vertexSourceFits(*ready.pipeline, p_vertices, 1u, 0u)))
+    {
+        return;
+    }
 
     detail::BufferRecord const* commands =
         detail::pools().buffers.get(p_commands);
     if (commands == nullptr)
     {
-        return failure("the buffer holding the draw command no longer exists");
+        return reportError("the buffer holding the draw command no longer exists");
     }
     if (commands->bytes < sizeof(DrawIndirectCommand))
     {
-        return failure(
+        return reportError(
             "a drawIndirect command is " +
             std::to_string(sizeof(DrawIndirectCommand)) +
             " bytes, and the buffer holds " +
@@ -404,7 +454,7 @@ Status drawIndirect(Pipeline const& p_pipeline,
     backend::drawIndirect(ready.pipeline->state.primitive, commands->native);
 
     detail::countDraw(0u, 1u);
-    return success();
+    return;
 }
 
 } // namespace gpu

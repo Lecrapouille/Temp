@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,13 +15,13 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "main.hpp"
 
-#include "Common/Result.hpp"
-#include "GPU/Core/Result.hpp"
+#include "Compages/Core/Result.hpp"
+#include "Compages/GPU/Core/Result.hpp"
 
 #include <memory>
 #include <string>
@@ -54,16 +54,18 @@ gpu::Status check(bool p_ok)
 //! \brief Gives up as soon as one step fails, forwarding its message.
 gpu::Status runSteps(bool p_first, bool p_second)
 {
-    GPU_TRY(check(p_first));
-    GPU_TRY(check(p_second));
+    COMPAGES_TRY(check(p_first));
+    COMPAGES_TRY(check(p_second));
     return gpu::success();
 }
 
 //! \brief Same, but needs the value of the step that succeeded.
 gpu::Result<int> quarter(int p_value)
 {
-    GPU_TRY_ASSIGN(once, half(p_value));
-    GPU_TRY_ASSIGN(twice, half(once));
+    int once = 0;
+    int twice = 0;
+    COMPAGES_TRY_ASSIGN(once, half(p_value));
+    COMPAGES_TRY_ASSIGN(twice, half(once));
     return twice;
 }
 
@@ -163,7 +165,7 @@ TEST(Result, ForwardsTheMessageOfTheStepThatFailed)
 //------------------------------------------------------------------------------
 TEST(Result, CannotBeIgnoredSilently)
 {
-    ASSERT_TRUE((std::is_same_v<gpu::Result<int>, gloop::Result<int>>));
+    ASSERT_TRUE((std::is_same_v<gpu::Result<int>, compages::Result<int>>));
     ASSERT_TRUE((std::is_same_v<decltype(half(2)), gpu::Result<int>>));
     // [[nodiscard]] cannot be observed at runtime; what can be checked is that
     // reading a Result needs an explicit test, since the conversion to bool is

@@ -1,21 +1,21 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
 #include "GPU/Backends/GL45/GL45.hpp"
@@ -389,7 +389,7 @@ void readBlockMembers(GLuint p_program,
         member.offset = static_cast<std::uint32_t>(values[2]);
         member.array_stride = static_cast<std::uint32_t>(values[3]);
         member.matrix_stride = static_cast<std::uint32_t>(values[4]);
-        p_block.members.push_back(std::move(member));
+        p_block.members.emplace_back(std::move(member));
     }
 }
 
@@ -518,7 +518,7 @@ void reflectProgram(NativeId p_program,
         attribute.elements = values[1];
         attribute.location = values[2];
         attribute.format = attributeFormatOf(attribute.type);
-        p_reflection.attributes.push_back(std::move(attribute));
+        p_reflection.attributes.emplace_back(std::move(attribute));
     }
 
     // The uniforms. GL_BLOCK_INDEX tells the ones living in a block from the ones
@@ -553,7 +553,7 @@ void reflectProgram(NativeId p_program,
         uniform.type = fromGL(static_cast<GLenum>(values[0]));
         uniform.elements = values[1];
         uniform.location = values[2];
-        p_reflection.uniforms.push_back(std::move(uniform));
+        p_reflection.uniforms.emplace_back(std::move(uniform));
     }
 
     // The uniform blocks, and then the storage blocks, which differ only in which
@@ -571,7 +571,7 @@ void reflectProgram(NativeId p_program,
                          GL_UNIFORM,
                          static_cast<GLuint>(i),
                          block);
-        p_reflection.uniform_blocks.push_back(std::move(block));
+        p_reflection.uniform_blocks.emplace_back(std::move(block));
     }
 
     const GLint storage_block_count =
@@ -588,7 +588,7 @@ void reflectProgram(NativeId p_program,
                          GL_BUFFER_VARIABLE,
                          static_cast<GLuint>(i),
                          block);
-        p_reflection.storage_blocks.push_back(std::move(block));
+        p_reflection.storage_blocks.emplace_back(std::move(block));
     }
 
     // Asking a program without a compute stage for its work group size is an
@@ -692,6 +692,79 @@ void setUniform(NativeId p_program,
         case DataType::DVec2:
         case DataType::DVec3:
         case DataType::DVec4:
+        case DataType::Mat2x3:
+        case DataType::Mat2x4:
+        case DataType::Mat3x2:
+        case DataType::Mat3x4:
+        case DataType::Mat4x2:
+        case DataType::Mat4x3:
+        case DataType::Sampler1D:
+        case DataType::Sampler2D:
+        case DataType::Sampler3D:
+        case DataType::SamplerCube:
+        case DataType::Sampler1DArray:
+        case DataType::Sampler2DArray:
+        case DataType::SamplerCubeArray:
+        case DataType::Sampler2DShadow:
+        case DataType::SamplerCubeShadow:
+        case DataType::SamplerBuffer:
+        case DataType::ISampler2D:
+        case DataType::ISampler3D:
+        case DataType::USampler2D:
+        case DataType::USampler3D:
+        case DataType::Image1D:
+        case DataType::Image2D:
+        case DataType::Image3D:
+        case DataType::ImageCube:
+        case DataType::Image2DArray:
+        case DataType::IImage2D:
+        case DataType::UImage2D:
+        case DataType::Unknown:
+            break;
+    }
+}
+
+//------------------------------------------------------------------------------
+void setUniformArray(NativeId p_program,
+                     int p_location,
+                     DataType p_type,
+                     const void* p_data,
+                     int p_count)
+{
+    if (p_count <= 0)
+    {
+        return;
+    }
+    const GLuint program = static_cast<GLuint>(p_program);
+    const auto* floats = static_cast<const GLfloat*>(p_data);
+    switch (p_type)
+    {
+        case DataType::Mat4:
+            glProgramUniformMatrix4fv(
+                program, p_location, p_count, GL_FALSE, floats);
+            break;
+        case DataType::Float:
+        case DataType::Vec2:
+        case DataType::Vec3:
+        case DataType::Vec4:
+        case DataType::Double:
+        case DataType::DVec2:
+        case DataType::DVec3:
+        case DataType::DVec4:
+        case DataType::Int:
+        case DataType::IVec2:
+        case DataType::IVec3:
+        case DataType::IVec4:
+        case DataType::UInt:
+        case DataType::UVec2:
+        case DataType::UVec3:
+        case DataType::UVec4:
+        case DataType::Bool:
+        case DataType::BVec2:
+        case DataType::BVec3:
+        case DataType::BVec4:
+        case DataType::Mat2:
+        case DataType::Mat3:
         case DataType::Mat2x3:
         case DataType::Mat2x4:
         case DataType::Mat3x2:

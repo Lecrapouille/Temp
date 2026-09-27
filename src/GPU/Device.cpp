@@ -1,24 +1,24 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Device.hpp"
 #include "GPU/Backends/Backend.hpp"
 #include "GPU/Internal/Pools.hpp"
 
@@ -39,6 +39,7 @@ struct State
     DeviceInfo info;
     LogCallback logger = nullptr;
     bool initialized = false;
+    bool driver_hints = false;
 };
 
 State& state()
@@ -85,7 +86,7 @@ Status init(LoadProc p_load)
     }
 
     s.info = DeviceInfo{};
-    GPU_TRY(backend::init(p_load, s.info));
+    COMPAGES_TRY(backend::init(p_load, s.info));
     s.initialized = true;
 
     log(LogLevel::Info,
@@ -147,6 +148,18 @@ void log(LogLevel p_level, std::string_view p_message)
         callback = &defaultLogger;
     }
     callback(p_level, p_message);
+}
+
+//------------------------------------------------------------------------------
+void reportDriverHints(bool p_report)
+{
+    state().driver_hints = p_report;
+}
+
+//------------------------------------------------------------------------------
+bool driverHintsReported()
+{
+    return state().driver_hints;
 }
 
 } // namespace gpu

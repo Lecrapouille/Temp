@@ -1,34 +1,32 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "Scene/SceneSerializer.hpp"
+#include "Compages/Scene/SceneSerializer.hpp"
 
-#include "Assets/AssetManager.hpp"
-#include "Scene/Scene.hpp"
-#include "World/Components/BoxCollider.hpp"
-#include "World/Components/Camera.hpp"
-#include "World/Components/Light.hpp"
-#include "World/Components/MeshRenderer.hpp"
-#include "World/Components/PrefabInstance.hpp"
-#include "World/Components/RigidBody.hpp"
-#include "World/World.hpp"
+#include "Compages/Scene/Assets/AssetManager.hpp"
+#include "Compages/Scene/Scene.hpp"
+#include "Compages/Scene/Camera.hpp"
+#include "Compages/Scene/Light.hpp"
+#include "Compages/Scene/MeshRenderer.hpp"
+#include "Compages/Scene/PrefabInstance.hpp"
+#include "Compages/Scene/World.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -69,14 +67,14 @@ Quatf readQuat(json const& p_j)
                  p_j.at(3).get<float>());
 }
 
-void collectSubtree(world::World const& p_world,
-                    world::Entity p_entity,
-                    std::vector<world::Entity>& p_order,
-                    std::unordered_map<world::Entity, int>& p_index)
+void collectSubtree(scene::World const& p_world,
+                    scene::EntityId p_entity,
+                    std::vector<scene::EntityId>& p_order,
+                    std::unordered_map<scene::EntityId, int>& p_index)
 {
     p_index[p_entity] = static_cast<int>(p_order.size());
-    p_order.push_back(p_entity);
-    world::Entity child = p_world.firstChild(p_entity);
+    p_order.emplace_back(p_entity);
+    scene::EntityId child = p_world.firstChild(p_entity);
     while (child.valid())
     {
         collectSubtree(p_world, child, p_order, p_index);
@@ -84,9 +82,9 @@ void collectSubtree(world::World const& p_world,
     }
 }
 
-json serializeEntity(world::World const& p_world,
-                     assets::AssetManager const& p_assets,
-                     world::Entity p_entity,
+json serializeEntity(scene::World const& p_world,
+                     scene::AssetManager const& p_assets,
+                     scene::EntityId p_entity,
                      int p_parent_index)
 {
     json node;
@@ -94,13 +92,13 @@ json serializeEntity(world::World const& p_world,
     node["parent"] = p_parent_index;
     node["enabled"] = p_world.enabled(p_entity);
 
-    const world::LocalTransform& tr = p_world.transform(p_entity);
+    const scene::LocalTransform& tr = p_world.transform(p_entity);
     node["transform"] = { { "position", vec3(tr.position) },
                           { "rotation", quat(tr.rotation) },
                           { "scale", vec3(tr.scale) } };
 
-    if (world::MeshRenderer const* renderer =
-            p_world.tryGet<world::MeshRenderer>(p_entity))
+    if (scene::MeshRenderer const* renderer =
+            p_world.tryGet<scene::MeshRenderer>(p_entity))
     {
         node["mesh_renderer"] = {
             { "mesh", p_assets.meshName(renderer->mesh) },
@@ -111,11 +109,11 @@ json serializeEntity(world::World const& p_world,
         };
     }
 
-    if (world::Camera const* camera = p_world.tryGet<world::Camera>(p_entity))
+    if (scene::Camera const* camera = p_world.tryGet<scene::Camera>(p_entity))
     {
         node["camera"] = {
             { "projection",
-              (camera->projection == world::Projection::Perspective)
+              (camera->projection == scene::Projection::Perspective)
                   ? "perspective"
                   : "orthographic" },
             { "fov_degrees", camera->fov_degrees },
@@ -125,8 +123,8 @@ json serializeEntity(world::World const& p_world,
         };
     }
 
-    if (world::DirectionalLight const* light =
-            p_world.tryGet<world::DirectionalLight>(p_entity))
+    if (scene::DirectionalLight const* light =
+            p_world.tryGet<scene::DirectionalLight>(p_entity))
     {
         node["directional_light"] = {
             { "color", vec3(light->color) },
@@ -134,8 +132,8 @@ json serializeEntity(world::World const& p_world,
         };
     }
 
-    if (world::PointLight const* point =
-            p_world.tryGet<world::PointLight>(p_entity))
+    if (scene::PointLight const* point =
+            p_world.tryGet<scene::PointLight>(p_entity))
     {
         node["point_light"] = {
             { "color", vec3(point->color) },
@@ -144,34 +142,8 @@ json serializeEntity(world::World const& p_world,
         };
     }
 
-    if (world::RigidBody const* body = p_world.tryGet<world::RigidBody>(p_entity))
-    {
-        const char* type_name = "dynamic";
-        if (body->type == world::BodyType::Static)
-        {
-            type_name = "static";
-        }
-        else if (body->type == world::BodyType::Kinematic)
-        {
-            type_name = "kinematic";
-        }
-        node["rigid_body"] = {
-            { "type", type_name },
-            { "mass", body->mass },
-            { "velocity", vec3(body->velocity) }
-        };
-    }
-
-    if (world::BoxCollider const* collider =
-            p_world.tryGet<world::BoxCollider>(p_entity))
-    {
-        node["box_collider"] = {
-            { "half_extent", vec3(collider->half_extent) }
-        };
-    }
-
-    if (world::PrefabInstance const* prefab =
-            p_world.tryGet<world::PrefabInstance>(p_entity))
+    if (scene::PrefabInstance const* prefab =
+            p_world.tryGet<scene::PrefabInstance>(p_entity))
     {
         node["prefab_instance"] = {
             { "prefab", p_assets.prefabName(prefab->prefab) }
@@ -181,9 +153,9 @@ json serializeEntity(world::World const& p_world,
     return node;
 }
 
-gloop::Status applyComponents(world::World& p_world,
-                            assets::AssetManager const& p_assets,
-                            world::Entity p_entity,
+compages::Status applyComponents(scene::World& p_world,
+                            scene::AssetManager const& p_assets,
+                            scene::EntityId p_entity,
                             json const& p_node)
 {
     if (p_node.contains("mesh_renderer"))
@@ -192,17 +164,17 @@ gloop::Status applyComponents(world::World& p_world,
         const std::string mesh_name = mr.at("mesh").get<std::string>();
         const std::string material_name =
             mr.at("material_instance").get<std::string>();
-        const assets::MeshAssetId mesh = p_assets.findMesh(mesh_name);
-        const assets::MaterialInstanceId material =
+        const scene::MeshAssetId mesh = p_assets.findMesh(mesh_name);
+        const scene::MaterialInstanceId material =
             p_assets.findMaterialInstance(material_name);
         if (!mesh.valid() || !material.valid())
         {
-            return gloop::failure("scene file references missing assets");
+            return compages::failure("scene file references missing assets");
         }
-        world::MeshRenderer renderer;
+        scene::MeshRenderer renderer;
         renderer.mesh = mesh;
         renderer.material_instance = material;
-        renderer.flags = static_cast<world::RenderFlags>(
+        renderer.flags = static_cast<scene::RenderFlags>(
             mr.at("flags").get<std::uint32_t>());
         p_world.add(p_entity, renderer);
     }
@@ -210,11 +182,11 @@ gloop::Status applyComponents(world::World& p_world,
     if (p_node.contains("camera"))
     {
         json const& cam = p_node.at("camera");
-        world::Camera camera;
+        scene::Camera camera;
         const std::string projection = cam.at("projection").get<std::string>();
         camera.projection = (projection == "orthographic")
-                                ? world::Projection::Orthographic
-                                : world::Projection::Perspective;
+                                ? scene::Projection::Orthographic
+                                : scene::Projection::Perspective;
         camera.fov_degrees = cam.at("fov_degrees").get<float>();
         camera.ortho_half_height = cam.at("ortho_half_height").get<float>();
         camera.near_plane = cam.at("near_plane").get<float>();
@@ -225,7 +197,7 @@ gloop::Status applyComponents(world::World& p_world,
     if (p_node.contains("directional_light"))
     {
         json const& light = p_node.at("directional_light");
-        world::DirectionalLight directional;
+        scene::DirectionalLight directional;
         directional.color = readVec3(light.at("color"));
         directional.intensity = light.at("intensity").get<float>();
         p_world.add(p_entity, directional);
@@ -234,71 +206,39 @@ gloop::Status applyComponents(world::World& p_world,
     if (p_node.contains("point_light"))
     {
         json const& light = p_node.at("point_light");
-        world::PointLight point;
+        scene::PointLight point;
         point.color = readVec3(light.at("color"));
         point.intensity = light.at("intensity").get<float>();
         point.range = light.value("range", 100.0f);
         p_world.add(p_entity, point);
     }
 
-    if (p_node.contains("rigid_body"))
-    {
-        json const& body = p_node.at("rigid_body");
-        world::RigidBody rigid;
-        const std::string type = body.value("type", "dynamic");
-        if (type == "static")
-        {
-            rigid.type = world::BodyType::Static;
-        }
-        else if (type == "kinematic")
-        {
-            rigid.type = world::BodyType::Kinematic;
-        }
-        else
-        {
-            rigid.type = world::BodyType::Dynamic;
-        }
-        rigid.mass = body.value("mass", 1.0f);
-        if (body.contains("velocity"))
-        {
-            rigid.velocity = readVec3(body.at("velocity"));
-        }
-        p_world.add(p_entity, rigid);
-    }
-
-    if (p_node.contains("box_collider"))
-    {
-        world::BoxCollider collider;
-        collider.half_extent = readVec3(p_node.at("box_collider").at("half_extent"));
-        p_world.add(p_entity, collider);
-    }
-
     if (p_node.contains("prefab_instance"))
     {
         const std::string prefab_name =
             p_node.at("prefab_instance").at("prefab").get<std::string>();
-        const assets::PrefabId prefab = p_assets.findPrefab(prefab_name);
+        const scene::PrefabId prefab = p_assets.findPrefab(prefab_name);
         if (!prefab.valid())
         {
-            return gloop::failure("scene file references unknown prefab '" +
+            return compages::failure("scene file references unknown prefab '" +
                                prefab_name + "'");
         }
-        p_world.add(p_entity, world::PrefabInstance{ prefab });
+        p_world.add(p_entity, scene::PrefabInstance{ prefab });
     }
 
-    return gloop::success();
+    return compages::success();
 }
 
 } // namespace
 
 //------------------------------------------------------------------------------
-gloop::Status save(world::World const& p_world,
-                 assets::AssetManager const& p_assets,
+compages::Status save(scene::World const& p_world,
+                 scene::AssetManager const& p_assets,
                  std::string const& p_path)
 {
-    std::vector<world::Entity> order;
-    std::unordered_map<world::Entity, int> index;
-    p_world.spatial().forEachRoot([&](world::NodeId p_root) {
+    std::vector<scene::EntityId> order;
+    std::unordered_map<scene::EntityId, int> index;
+    p_world.spatial().forEachRoot([&](scene::NodeId p_root) {
         collectSubtree(p_world,
                        p_world.spatial().entityOf(p_root),
                        order,
@@ -308,12 +248,12 @@ gloop::Status save(world::World const& p_world,
     json document;
     document["version"] = 1;
     json entities = json::array();
-    for (world::Entity entity : order)
+    for (scene::EntityId entity : order)
     {
-        world::Entity parent = p_world.parent(entity);
+        scene::EntityId parent = p_world.parent(entity);
         const int parent_index =
             parent.valid() ? index.at(parent) : -1;
-        entities.push_back(
+        entities.emplace_back(
             serializeEntity(p_world, p_assets, entity, parent_index));
     }
     document["entities"] = std::move(entities);
@@ -321,38 +261,38 @@ gloop::Status save(world::World const& p_world,
     std::ofstream out(p_path);
     if (!out)
     {
-        return gloop::failure("cannot write scene file '" + p_path + "'");
+        return compages::failure("cannot write scene file '" + p_path + "'");
     }
     out << document.dump(2);
-    return gloop::success();
+    return compages::success();
 }
 
 //------------------------------------------------------------------------------
-gloop::Result<std::vector<world::Entity>>
-load(world::World& p_world,
-     assets::AssetManager const& p_assets,
+compages::Result<std::vector<scene::EntityId>>
+load(scene::World& p_world,
+     scene::AssetManager const& p_assets,
      std::string const& p_path)
 {
     std::ifstream in(p_path);
     if (!in)
     {
-        return gloop::failure("cannot read scene file '" + p_path + "'");
+        return compages::failure("cannot read scene file '" + p_path + "'");
     }
 
     json document;
     in >> document;
     if (!document.contains("entities"))
     {
-        return gloop::failure("scene file has no entities array");
+        return compages::failure("scene file has no entities array");
     }
 
     json const& entities = document.at("entities");
-    std::vector<world::Entity> created;
+    std::vector<scene::EntityId> created;
     created.reserve(entities.size());
 
     for (json const& node : entities)
     {
-        world::Entity entity = p_world.create(node.value("name", ""));
+        scene::EntityId entity = p_world.create(node.value("name", ""));
         if (!node.value("enabled", true))
         {
             p_world.setEnabled(entity, false);
@@ -361,15 +301,15 @@ load(world::World& p_world,
         if (node.contains("transform"))
         {
             json const& tr = node.at("transform");
-            world::LocalTransform local;
+            scene::LocalTransform local;
             local.position = readVec3(tr.at("position"));
             local.rotation = readQuat(tr.at("rotation"));
             local.scale = readVec3(tr.at("scale"));
             p_world.transform(entity) = local;
         }
 
-        GPU_TRY(applyComponents(p_world, p_assets, entity, node));
-        created.push_back(entity);
+        COMPAGES_TRY(applyComponents(p_world, p_assets, entity, node));
+        created.emplace_back(entity);
     }
 
     for (std::size_t i = 0u; i < entities.size(); ++i)
@@ -377,17 +317,17 @@ load(world::World& p_world,
         const int parent_index = entities.at(i).value("parent", -1);
         if (parent_index >= 0)
         {
-            GPU_TRY(p_world.setParent(
+            COMPAGES_TRY(p_world.setParent(
                 created[i], created[static_cast<std::size_t>(parent_index)]));
         }
     }
 
-    std::vector<world::Entity> roots;
+    std::vector<scene::EntityId> roots;
     for (std::size_t i = 0u; i < entities.size(); ++i)
     {
         if (entities.at(i).value("parent", -1) < 0)
         {
-            roots.push_back(created[i]);
+            roots.emplace_back(created[i]);
         }
     }
 
@@ -396,13 +336,13 @@ load(world::World& p_world,
 }
 
 //------------------------------------------------------------------------------
-gloop::Status saveScene(scene::Scene const& p_scene, std::string const& p_path)
+compages::Status saveScene(scene::Scene const& p_scene, std::string const& p_path)
 {
     json document;
     document["version"] = 2;
 
     json scene_node;
-    if (p_scene.activeCamera().valid())
+    if (p_scene.activeCamera())
     {
         scene_node["active_camera"] = p_scene.world().name(p_scene.activeCamera());
     }
@@ -419,9 +359,9 @@ gloop::Status saveScene(scene::Scene const& p_scene, std::string const& p_path)
         vec3(p_scene.environment().default_light_direction);
     document["scene"] = std::move(scene_node);
 
-    std::vector<world::Entity> order;
-    std::unordered_map<world::Entity, int> index;
-    p_scene.world().spatial().forEachRoot([&](world::NodeId p_root) {
+    std::vector<scene::EntityId> order;
+    std::unordered_map<scene::EntityId, int> index;
+    p_scene.world().spatial().forEachRoot([&](scene::NodeId p_root) {
         collectSubtree(p_scene.world(),
                        p_scene.world().spatial().entityOf(p_root),
                        order,
@@ -429,11 +369,11 @@ gloop::Status saveScene(scene::Scene const& p_scene, std::string const& p_path)
     });
 
     json entities = json::array();
-    for (world::Entity entity : order)
+    for (scene::EntityId entity : order)
     {
-        world::Entity parent = p_scene.world().parent(entity);
+        scene::EntityId parent = p_scene.world().parent(entity);
         const int parent_index = parent.valid() ? index.at(parent) : -1;
-        entities.push_back(serializeEntity(
+        entities.emplace_back(serializeEntity(
             p_scene.world(), p_scene.assets(), entity, parent_index));
     }
     document["entities"] = std::move(entities);
@@ -441,27 +381,27 @@ gloop::Status saveScene(scene::Scene const& p_scene, std::string const& p_path)
     std::ofstream out(p_path);
     if (!out)
     {
-        return gloop::failure("cannot write scene file '" + p_path + "'");
+        return compages::failure("cannot write scene file '" + p_path + "'");
     }
     out << document.dump(2);
-    return gloop::success();
+    return compages::success();
 }
 
 //------------------------------------------------------------------------------
-gloop::Result<std::vector<world::Entity>>
+compages::Result<std::vector<scene::EntityId>>
 loadScene(scene::Scene& p_scene, std::string const& p_path)
 {
     std::ifstream in(p_path);
     if (!in)
     {
-        return gloop::failure("cannot read scene file '" + p_path + "'");
+        return compages::failure("cannot read scene file '" + p_path + "'");
     }
 
     json document;
     in >> document;
     if (!document.contains("entities"))
     {
-        return gloop::failure("scene file has no entities array");
+        return compages::failure("scene file has no entities array");
     }
 
     if (document.contains("scene"))
@@ -489,14 +429,14 @@ loadScene(scene::Scene& p_scene, std::string const& p_path)
         }
     }
 
-    world::World& world = p_scene.world();
+    scene::World& world = p_scene.world();
     json const& entities = document.at("entities");
-    std::vector<world::Entity> created;
+    std::vector<scene::EntityId> created;
     created.reserve(entities.size());
 
     for (json const& node : entities)
     {
-        world::Entity entity = world.create(node.value("name", ""));
+        scene::EntityId entity = world.create(node.value("name", ""));
         if (!node.value("enabled", true))
         {
             world.setEnabled(entity, false);
@@ -505,15 +445,15 @@ loadScene(scene::Scene& p_scene, std::string const& p_path)
         if (node.contains("transform"))
         {
             json const& tr = node.at("transform");
-            world::LocalTransform local;
+            scene::LocalTransform local;
             local.position = readVec3(tr.at("position"));
             local.rotation = readQuat(tr.at("rotation"));
             local.scale = readVec3(tr.at("scale"));
             world.transform(entity) = local;
         }
 
-        GPU_TRY(applyComponents(world, p_scene.assets(), entity, node));
-        created.push_back(entity);
+        COMPAGES_TRY(applyComponents(world, p_scene.assets(), entity, node));
+        created.emplace_back(entity);
     }
 
     for (std::size_t i = 0u; i < entities.size(); ++i)
@@ -521,7 +461,7 @@ loadScene(scene::Scene& p_scene, std::string const& p_path)
         const int parent_index = entities.at(i).value("parent", -1);
         if (parent_index >= 0)
         {
-            GPU_TRY(world.setParent(
+            COMPAGES_TRY(world.setParent(
                 created[i], created[static_cast<std::size_t>(parent_index)]));
         }
     }
@@ -533,23 +473,23 @@ loadScene(scene::Scene& p_scene, std::string const& p_path)
         {
             const std::string camera_name =
                 scene_node.at("active_camera").get<std::string>();
-            for (world::Entity entity : created)
+            for (scene::EntityId entity : created)
             {
                 if (world.name(entity) == camera_name)
                 {
-                    p_scene.setActiveCamera(entity);
+                    p_scene.activeCamera(entity);
                     break;
                 }
             }
         }
     }
 
-    std::vector<world::Entity> roots;
+    std::vector<scene::EntityId> roots;
     for (std::size_t i = 0u; i < entities.size(); ++i)
     {
         if (entities.at(i).value("parent", -1) < 0)
         {
-            roots.push_back(created[i]);
+            roots.emplace_back(created[i]);
         }
     }
 

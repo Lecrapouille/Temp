@@ -1,31 +1,31 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
 #pragma once
 
-#include "GPU/Core/Enums.hpp"
-#include "GPU/Core/Reflection.hpp"
-#include "GPU/Core/RenderState.hpp"
-#include "GPU/Device.hpp"
-#include "GPU/RenderPass.hpp"
-#include "GPU/Texture.hpp"
+#include "Compages/GPU/Core/Enums.hpp"
+#include "Compages/GPU/Core/Reflection.hpp"
+#include "Compages/GPU/Core/RenderState.hpp"
+#include "Compages/GPU/Device.hpp"
+#include "Compages/GPU/RenderPass.hpp"
+#include "Compages/GPU/Texture.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -205,6 +205,14 @@ void setUniform(NativeId p_program,
                 int p_location,
                 DataType p_type,
                 const void* p_data);
+
+//! \brief Write \c p_count consecutive array elements starting at
+//! \c p_location. Used for \c uniform mat4 uJoints[N].
+void setUniformArray(NativeId p_program,
+                     int p_location,
+                     DataType p_type,
+                     const void* p_data,
+                     int p_count);
 
 // ----------------------------------------------------------------------------
 //! \brief Say which binding point a uniform block is to be read from.
@@ -406,6 +414,12 @@ void bindPipeline(NativeId p_program,
 //! this library has talked to the same context.
 // ----------------------------------------------------------------------------
 void forgetRenderState();
+
+// ----------------------------------------------------------------------------
+//! \brief Draw every filled polygon as its edges, whatever the pipelines say.
+// ----------------------------------------------------------------------------
+void showWireframe(bool p_enabled);
+[[nodiscard]] bool wireframeShown();
 
 // ----------------------------------------------------------------------------
 //! \brief Say where the vertices are.

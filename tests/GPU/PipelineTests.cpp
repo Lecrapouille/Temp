@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,12 +15,12 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "GPUContext.hpp"
 
-#include "GPU/GPU.hpp"
+#include "Compages/GPU/GPU.hpp"
 
 using namespace tests;
 
@@ -174,7 +174,7 @@ void main() { values[gl_GlobalInvocationID.x] *= 2.0; }
 //! \brief What a Mesh looks like, using the names the shaders declare.
 gpu::VertexLayout meshLayout()
 {
-    return GPU_LAYOUT(Mesh, position, normal, uv);
+    return gpu::VertexLayout::of<Mesh>();
 }
 
 //! \brief A Sprite whose colour arrives as fractions between 0 and 1.
@@ -188,7 +188,7 @@ gpu::VertexLayout spriteLayoutNormalized()
 //! \brief A Sprite whose colour arrives as whole numbers.
 gpu::VertexLayout spriteLayoutInteger()
 {
-    return GPU_LAYOUT(Sprite, position, color);
+    return gpu::VertexLayout::of<Sprite>();
 }
 
 //! \brief Link a pair of sources, failing the test loudly when they will not.
@@ -333,7 +333,7 @@ TEST_F(PipelineTest, NamesTheAttributeTheVertexDoesNotHave)
     ASSERT_FALSE(bool(created));
     ASSERT_THAT(created.error(), HasSubstr("'aPosition'"));
     ASSERT_THAT(created.error(), HasSubstr("vec3 position"));
-    ASSERT_THAT(created.error(), HasSubstr("gpu::field"));
+    ASSERT_THAT(created.error(), HasSubstr(".rename("));
     ASSERT_EQ(gpu::livePipelines(), 0u);
     ASSERT_EQ(gpu::vertexReadersHeld(), 0u);
 }

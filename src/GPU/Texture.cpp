@@ -1,31 +1,33 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/Texture.hpp"
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Texture.hpp"
+#include "Compages/GPU/Errors.hpp"
+#include "Compages/GPU/Device.hpp"
 #include "GPU/Internal/Pools.hpp"
 
 #include <stb_image.h>
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
 
 namespace gpu
 {
@@ -364,8 +366,18 @@ Result<Texture> Texture::create(TextureDesc const& p_desc)
                        "to put a texture on");
     }
 
-    GPU_TRY_ASSIGN(settled, settle(p_desc));
-    GPU_TRY_ASSIGN(native, backend::createTexture(settled));
+    auto settled_result = settle(p_desc);
+    if (!settled_result)
+    {
+        return compages::failure(settled_result.error());
+    }
+    auto settled = settled_result.take();
+    auto native_result = backend::createTexture(settled);
+    if (!native_result)
+    {
+        return compages::failure(native_result.error());
+    }
+    auto native = native_result.take();
 
     auto added = detail::pools().textures.add(
         detail::TextureRecord{ native, settled, bytesOfTexture(settled) });
@@ -392,7 +404,7 @@ Result<Texture> Texture::fromFile(std::string const& p_path,
     stbi_set_flip_vertically_on_load(p_options.flip_vertically ? 1 : 0);
 
     LoadedImage image;
-    GPU_TRY(image.load(p_path, p_options.srgb));
+    COMPAGES_TRY(image.load(p_path, p_options.srgb));
 
     TextureDesc desc;
     desc.kind = TextureKind::Texture2D;
@@ -405,11 +417,16 @@ Result<Texture> Texture::fromFile(std::string const& p_path,
     desc.wrap_x = p_options.wrap;
     desc.wrap_y = p_options.wrap;
 
-    GPU_TRY_ASSIGN(texture, create(desc));
-    GPU_TRY(texture.write(image.pixels()));
+    auto texture_result = create(desc);
+    if (!texture_result)
+    {
+        return compages::failure(texture_result.error());
+    }
+    auto texture = texture_result.take();
+    COMPAGES_TRY(texture.write(image.pixels()));
     if (p_options.mipmaps)
     {
-        GPU_TRY(texture.generateMipmaps());
+        COMPAGES_TRY(texture.generateMipmaps());
     }
     return texture;
 }
@@ -431,7 +448,7 @@ Result<Texture> Texture::cubeFromFiles(
     std::array<LoadedImage, 6u> faces;
     for (std::size_t i = 0u; i < 6u; ++i)
     {
-        GPU_TRY(faces[i].load(p_paths[i], p_options.srgb));
+        COMPAGES_TRY(faces[i].load(p_paths[i], p_options.srgb));
     }
 
     for (std::size_t i = 1u; i < 6u; ++i)
@@ -464,16 +481,118 @@ Result<Texture> Texture::cubeFromFiles(
     desc.wrap_y = p_options.wrap;
     desc.wrap_z = p_options.wrap;
 
-    GPU_TRY_ASSIGN(texture, create(desc));
+    auto texture_result = create(desc);
+    if (!texture_result)
+    {
+        return compages::failure(texture_result.error());
+    }
+    auto texture = texture_result.take();
     for (std::uint32_t face = 0u; face < 6u; ++face)
     {
-        GPU_TRY(texture.writeLayer(face, faces[face].pixels()));
+        COMPAGES_TRY(texture.writeLayer(face, faces[face].pixels()));
     }
     if (p_options.mipmaps)
     {
-        GPU_TRY(texture.generateMipmaps());
+        COMPAGES_TRY(texture.generateMipmaps());
     }
     return texture;
+}
+
+//------------------------------------------------------------------------------
+Result<Texture> Texture::volumeFromFiles(std::vector<std::string> const& p_paths,
+                                         LoadOptions const& p_options)
+{
+    if (!initialized())
+    {
+        return failure("gpu::init() has not been called, so there is no device "
+                       "to put a texture on");
+    }
+    if (p_paths.empty())
+    {
+        return failure("a volume needs at least one image file");
+    }
+
+    stbi_set_flip_vertically_on_load(p_options.flip_vertically ? 1 : 0);
+
+    std::vector<std::unique_ptr<LoadedImage>> layers;
+    for (std::string const& path : p_paths)
+    {
+        layers.emplace_back(std::make_unique<LoadedImage>());
+        COMPAGES_TRY(layers.back()->load(path, p_options.srgb));
+        LoadedImage const& first = *layers.front();
+        LoadedImage const& last = *layers.back();
+        if ((last.width() != first.width()) || (last.height() != first.height()) ||
+            (last.format() != first.format()))
+        {
+            return failure("the layers of a volume must be the same size and "
+                           "format, but '" + path + "' is " +
+                           std::to_string(last.width()) + " by " +
+                           std::to_string(last.height()) + " " +
+                           toString(last.format()) + " while '" + p_paths[0] +
+                           "' is " + std::to_string(first.width()) + " by " +
+                           std::to_string(first.height()) + " " +
+                           toString(first.format()));
+        }
+    }
+
+    TextureDesc desc;
+    desc.kind = TextureKind::Texture3D;
+    desc.format = layers[0]->format();
+    desc.width = layers[0]->width();
+    desc.height = layers[0]->height();
+    desc.depth = static_cast<std::uint32_t>(layers.size());
+    desc.levels = p_options.mipmaps ? 0u : 1u;
+    desc.magnify = p_options.filter;
+    desc.minify = p_options.filter;
+    desc.wrap_x = p_options.wrap;
+    desc.wrap_y = p_options.wrap;
+    desc.wrap_z = p_options.wrap;
+
+    auto texture_result = create(desc);
+    if (!texture_result)
+    {
+        return compages::failure(texture_result.error());
+    }
+    auto texture = texture_result.take();
+    for (std::uint32_t z = 0u; z < desc.depth; ++z)
+    {
+        COMPAGES_TRY(texture.writeLayer(z, layers[z]->pixels()));
+    }
+    if (p_options.mipmaps)
+    {
+        COMPAGES_TRY(texture.generateMipmaps());
+    }
+    return texture;
+}
+
+//------------------------------------------------------------------------------
+Status Texture::loadVolume(std::vector<std::string> const& p_paths,
+                           LoadOptions const& p_options)
+{
+    COMPAGES_TRY_ASSIGN(*this, volumeFromFiles(p_paths, p_options));
+    return success();
+}
+
+//------------------------------------------------------------------------------
+Status Texture::allocate(TextureDesc const& p_desc)
+{
+    COMPAGES_TRY_ASSIGN(*this, create(p_desc));
+    return success();
+}
+
+//------------------------------------------------------------------------------
+Status Texture::load(std::string const& p_path, LoadOptions const& p_options)
+{
+    COMPAGES_TRY_ASSIGN(*this, fromFile(p_path, p_options));
+    return success();
+}
+
+//------------------------------------------------------------------------------
+Status Texture::loadCube(std::array<std::string, 6u> const& p_paths,
+                         LoadOptions const& p_options)
+{
+    COMPAGES_TRY_ASSIGN(*this, cubeFromFiles(p_paths, p_options));
+    return success();
 }
 
 //------------------------------------------------------------------------------
@@ -710,24 +829,23 @@ Status Texture::setWrap(Wrap p_x, Wrap p_y, Wrap p_z)
 }
 
 //------------------------------------------------------------------------------
-Status Texture::bind(std::uint32_t p_unit) const
+void Texture::bind(std::uint32_t p_unit) const
 {
     detail::TextureRecord const* record = detail::pools().textures.get(m_handle);
     if (record == nullptr)
     {
-        return failure(staleTextureMessage());
+        return reportError(staleTextureMessage());
     }
 
     const auto units = static_cast<std::uint32_t>(device().max_texture_units);
     if (p_unit >= units)
     {
-        return failure("texture unit " + std::to_string(p_unit) +
+        return reportError("texture unit " + std::to_string(p_unit) +
                        " does not exist: this driver offers " +
                        std::to_string(units));
     }
 
     backend::bindTexture(record->native, p_unit);
-    return success();
 }
 
 //------------------------------------------------------------------------------
@@ -824,6 +942,13 @@ std::size_t Texture::bytes() const
 bool Texture::valid() const
 {
     return detail::pools().textures.valid(m_handle);
+}
+
+//------------------------------------------------------------------------------
+std::uintptr_t Texture::nativeId() const
+{
+    detail::TextureRecord const* record = detail::pools().textures.get(m_handle);
+    return (record == nullptr) ? 0u : static_cast<std::uintptr_t>(record->native);
 }
 
 //------------------------------------------------------------------------------

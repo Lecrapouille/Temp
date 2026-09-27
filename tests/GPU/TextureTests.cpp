@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,13 +15,13 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "GPUContext.hpp"
 
-#include "GPU/GPU.hpp"
-#include "Common/File.hpp"
+#include "Compages/GPU/GPU.hpp"
+#include "Compages/Core/File.hpp"
 
 #include <array>
 #include <cstring>
@@ -50,7 +50,7 @@ std::vector<std::byte> pattern(std::size_t p_bytes)
 std::string dataPath(std::string const& p_name)
 {
     for (const char* root :
-         { "external/OpenGLCppWrapper-data/", "../external/OpenGLCppWrapper-data/" })
+         { "external/Compages-data/", "../external/Compages-data/" })
     {
         if (File::exist(root + p_name))
         {
@@ -543,11 +543,11 @@ TEST_F(TextureTest, BindsToATextureUnit)
 {
     auto texture = gpu::Texture::create({ .width = 4u, .height = 4u }).take();
 
-    auto bound = texture.bind(0u);
+    auto bound = gpu::attempt([&] { texture.bind(0u); });
     ASSERT_TRUE(bool(bound)) << bound.error();
 
     const auto units = static_cast<std::uint32_t>(gpu::device().max_texture_units);
-    auto too_far = texture.bind(units);
+    auto too_far = gpu::attempt([&] { texture.bind(units); });
     ASSERT_FALSE(bool(too_far));
     ASSERT_THAT(too_far.error(), HasSubstr("does not exist"));
 }

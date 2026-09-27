@@ -1,208 +1,210 @@
-# Compilation / Installation
+# Compilation and installation
 
-OpenGLCppWrapper is primarily developed on Linux. macOS builds up to and
-including OpenGL 4.1; the compute and DSA-based paths of the `gpu::` layer
-require an environment that can supply OpenGL 4.5 (see [Design.md](Design.md)
-on macOS). Windows is not currently maintained.
+Compages is a C++20 project developed primarily on Linux. Its current `GL45`
+backend requires an OpenGL 4.5 core context. Apple only exposes OpenGL 4.1, so
+macOS can compile Compages and run its CPU tests, but GPU tests are skipped and
+the example gallery cannot run there. Windows is not currently maintained.
 
-Note: In this doc the `-j8` with the `make` command is the number of your CPU
-cores. Adapt to your case.
+In the commands below, adapt `-j8` to the number of logical CPU cores on your
+machine.
 
-## Prerequisite
+## System prerequisites
 
-You need to install the following libs on your operating system: glfw glew.
-- Ubuntu, Debian: `sudo apt-get update && apt-get install libglew-dev libglfw3-dev libbz2-dev`
-- Mac OS X: `brew install glfw glew`
+The compiler, Make, CMake, Git and `pkg-config` are required. GLFW is a system
+dependency of the examples and GPU test harness; it is not a dependency of the
+Compages library itself.
 
-## Compilation of the API
-
-To download the project, its external libraries and compile the API with its examples:
+Ubuntu and Debian:
 
 ```sh
-git clone --recurse-submodules https://github.com/Lecrapouille/OpenGLCppWrapper.git --depth=1
-cd OpenGLCppWrapper
+sudo apt-get update
+sudo apt-get install build-essential cmake git pkg-config libglfw3-dev
+```
+
+For the unit tests, also install `libgtest-dev libgmock-dev`. A headless Linux
+machine needs `xvfb`, Mesa and `libgl1-mesa-dev` to run GPU tests and the gallery.
+
+macOS with Homebrew:
+
+```sh
+brew install cmake glfw googletest pkg-config
+```
+
+GLEW and bzip2 are not dependencies of the current implementation.
+
+## Build
+
+The recursive clone retrieves the MyMakefile build machinery. The other
+third-party sources are described by `external/manifest` and downloaded into
+`external/` by the first Make target:
+
+```sh
+git clone --recurse-submodules https://github.com/Lecrapouille/Compages.git
+cd Compages
 make download-external-libs
-make compile-external-libs
-make -j8
+make -j8 all
 ```
 
-The `--recurse-submodules` is important to get my Makefile routines for compiling the project.
+`compile-external-libs` builds ReactPhysics3D, which only the physics parked in
+`attic/Physics/` needs; the library and the gallery do not link it. The main
+build creates static and shared Compages libraries in `build/` and also builds
+the gallery through the top-level `post-build` target. Run `make help` to list
+the available targets and variables.
 
-If you are a developper `make download-external-libs` and `make compile-external-libs`
-has to be called once or when you want to upgrade the libraries: they follow the
-master branch and they remove the previously downloaded third-parts.
+## Examples
 
-The `make download-external-libs` command plays the same role than a recursive git clone because
-I hate git submodules: it always make things painful and `repo`
-with its manifests is a bit overkill, so I prefer Makefile rules or script
-shell and this gave me good result even with continuous integration.
+The 43 examples in the current numbered grid are compiled into one gallery:
 
-After `make` a `build/` folder shall have been created containing the compiled
-and runnable files. Two libraries (one static the second dynamic) shall also be
-present. You can use them for your project. You can type `sudo make install` to
-install them on your system.
+- `00_GettingStarted`: 16 examples, from `00a_Dummy` through `07_PointClouds`;
+- `10_ScientificAndCompute`: 7 examples;
+- `20_Performance`: 3 examples;
+- `30_WorldAndAssets`: 13 examples;
+- `50_Complete`: 4 examples, ending with the `53_DoomLike` game.
 
-If, after that, you want to modify code source, just do `make`. You can type
-`make help` for displaying rules.
-
-## Compilation of examples
-
-The seventeen examples live in a single program that shares one window and one
-overlay:
+See [the examples guide](../examples/README.md) for the complete names. Build
+the gallery explicitly, if the top-level build has not already done so:
 
 ```sh
-cd examples
-make -j8
+make -j8 -C examples all
 ```
 
-Run the gallery:
+Run it from the repository root:
+
 ```sh
-./build/OpenGLCppWrapper-examples                    # start at the first
-./build/OpenGLCppWrapper-examples 05_IndexedCube     # start on that one
-./build/OpenGLCppWrapper-examples --check            # smoke + leak test
-./build/OpenGLCppWrapper-examples --shots /tmp/shots # one PNG per example
+./build/Compages-examples                         # start at 00a_Dummy
+./build/Compages-examples 04_DepthAndTransforms  # start at this example
+./build/Compages-examples --check                 # all 43: smoke + leak test
+./build/Compages-examples --check --shots /tmp/shots
 ```
 
-Arrows switch example, space hides the overlay, escape quits. The overlay's
-"resources" counters should fall back to zero when an example is left; that is
-the leak test the `--check` mode automates.
-
-## Installation
-
-Multiple versions of this library can coexist thanks to their versioning number.
-After the compilation, just type:
+Arrow keys switch examples, space hides the overlay and escape quits.
+`--check` visits every example for a few frames and fails if one cannot run or
+leaves a GPU resource behind. It requires OpenGL 4.5; on a headless Linux host,
+run it under Xvfb and llvmpipe:
 
 ```sh
-cd OpenGLCppWrapper
+xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 \
+  MESA_GL_VERSION_OVERRIDE=4.5 MESA_GLSL_VERSION_OVERRIDE=450 \
+  ./build/Compages-examples --check
+```
+
+## Installation layout
+
+The defaults come from `.makefile/project/Makefile`, not from a distribution-
+specific path:
+
+- `PREFIX=/usr/local`;
+- `INCLUDEDIR=$(PREFIX)/include`;
+- `LIBDIR=$(PREFIX)/lib`;
+- `PKGLIBDIR=$(LIBDIR)/pkgconfig`;
+- `DATADIR=$(PREFIX)/share`.
+
+Install with:
+
+```sh
 sudo make install
 ```
 
-This will install:
-* in `/usr/lib`: the static and shared libraries libOpenGLCppWrapper.
-* in `/usr/include/openglcppwrapper-<version>`: all headers files (hpp).
-* in `/usr/lib/pkgconfig`: a pkg confile file for linking this API with your future projects.
-* in `/usr/share/OpenGLCppWrapper/<version>/`: documentation, examples and other files.
+For version 0.10.0 and the default prefix, this installs:
 
-If you do not like the default location, Pass to Makefile options `DESTDIR`,
-`PREFIX` and `BINDIR` or directly edit the file `.makefile/Makefile.header`
-(note: touching a makefile will force to recompile the whole project).
+- `libCompages` (static and shared) in `/usr/local/lib`;
+- public headers from `include/`, plus the public EnTT and units headers, under
+  `/usr/local/include/Compages/0.10.0/`;
+- `Compages.pc` and the versioned `Compages-0.10.0.pc` in
+  `/usr/local/lib/pkgconfig`;
+- project documentation/data under `/usr/local/share/Compages/0.10.0/`.
 
-Check the presence of libraries in your system:
+The include root contains the `Compages/` directory, so consumers use
+`#include <Compages/...>`. No header under `src/` is public or installed.
+
+Override `PREFIX`, `INCLUDEDIR`, `LIBDIR`, `PKGLIBDIR`, `DATADIR` or `BINDIR`
+on the Make command line when needed. `DESTDIR` stages files without changing
+the paths recorded in the generated pkg-config file, for example:
+
 ```sh
-cd /usr/lib
-ls -la libOpenGLCppWrapper*
-```
-Or better:
-```
-echo `pkg-config `openglcppwrapper --libs``
+make DESTDIR="$PWD/stage" PREFIX=/usr install
 ```
 
-## Developpers
+Do not assume `/usr/lib` or `/usr/include`: query the selected Make variables
+or pkg-config. With the default installation:
 
-### How to use OpenGLCppWrapper in your project?
+```sh
+pkg-config --modversion Compages
+pkg-config --cflags --libs Compages
+```
 
-The public headers are the ones under `src/GPU/`, `src/Assets/`, `src/World/`,
-`src/Scene/` and `src/Render/`. Include what you need directly, e.g.:
+If `/usr/local/lib/pkgconfig` is not in the platform search path:
+
+```sh
+export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
+```
+
+## Using the installed library
+
+All public contracts live under `include/Compages/`. Prefer the umbrella header
+or include only the required components:
 
 ```cpp
-#include <OpenGLCppWrapper/GPU/GPU.hpp>
-#include <OpenGLCppWrapper/World/World.hpp>
-#include <OpenGLCppWrapper/Scene/Scene.hpp>
-#include <OpenGLCppWrapper/Render/Extractor.hpp>
-#include <OpenGLCppWrapper/Render/Renderer.hpp>
+#include <Compages/Compages.hpp>
+#include <Compages/GPU/GPU.hpp>
+#include <Compages/World/World.hpp>
 ```
 
-`gpu::init` never opens a window. Pass it the driver-symbol loader that comes
-from the toolkit that already opened the context (GLFW, SDL, Qt…):
+`gpu::init()` does not create a window or context. Pass the symbol resolver from
+the toolkit which created the context, such as `glfwGetProcAddress`,
+`SDL_GL_GetProcAddress` or the Qt equivalent.
 
-```cpp
-if (auto ready = gpu::init(&glfwGetProcAddress); !ready) {
-    std::cerr << ready.error() << '\n';
-    return EXIT_FAILURE;
-}
-```
-
-Compile using pkg-config:
-```sh
-CFLAGS=`pkg-config openglcppwrapper --cflags`
-LDFLAGS=`pkg-config openglcppwrapper --libs`
-g++ -std=c++20 main.cpp -o prog $CFLAGS $LDFLAGS
-```
-
-**note:** You may need indicate where are shared libraries. For example on Mac OS X:
+Compile and link an installed consumer with the actual generated package name:
 
 ```sh
-export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/your/path/to/your/lib/folder
+c++ -std=c++20 main.cpp -o app $(pkg-config --cflags --libs Compages)
 ```
 
-Example with Makefile given in [here](https://github.com/Lecrapouille/LinkAgainstMyLibs/tree/master/OpenGL).
+For a fully static link, use `pkg-config --static`. At runtime, ensure the selected `LIBDIR` is visible
+to the platform dynamic loader, or embed an rpath in the application.
 
-### What code to write in my project ?
+## Unit tests
 
-* [Tutorial](tutorials/Core.md) — a short guided walk of both stacks.
-* [Examples](../examples/README.md) — the numbered walkthrough, one idea per file.
-* [Architecture](Architecture.md) — the map of the layers.
-* [Design](Design.md) — the *why* of each choice.
-* [Debug OpenGL](Traces.md)
-
-### Doxygen
-
-Documentation of the code source can be found [here](https://lecrapouille.github.io/OpenGLCppWrapper.github.io/).
-It can be localy generated as `doc/html/index.html` by typing `make doc`.
-
-### Unit tests
-
-Tests depend on [googletest](https://github.com/google/googletest). Install
-it once, then:
+With GoogleTest and GoogleMock installed:
 
 ```sh
-cd OpenGLCppWrapper/tests
-make -j8
-./build/OpenGLCppWrapper-UnitTest
+make -j8 -C tests all
+./build/Compages-UnitTest
 ```
 
-The tests cover the `gpu::` layer against an offscreen context, the linear
-algebra, `AABB`, `Frustum` and `Units` under `Math/`, and the full simulation
-stack under `World/` (registry, spatial graph, transforms, components,
-hierarchy) plus the extraction-to-draw pipeline in `WorldDrawTests.cpp`.
+On headless Linux, use the same Xvfb/llvmpipe environment shown for the gallery.
+Tests which need an unavailable OpenGL 4.5 context skip themselves; this is the
+expected limitation on macOS. CPU tests still execute there.
 
-For a coverage report:
+For a local coverage report:
 
 ```sh
-cd OpenGLCppWrapper/tests
-make coverage
+make -C tests coverage
 ```
 
-If all tests pass, a coverage report is written to `doc/coverage/` and the
-`index.html` is opened automatically.
+## Third-party dependency model
 
-### Third-parts
+- **EnTT 4.0.0** and **units 2.3.3** are header-only public dependencies.
+  They are downloaded by `download-external-libs`; installation copies EnTT
+  headers and `units.h` into the versioned Compages include root because public
+  Compages headers include them.
+- **ReactPhysics3D 0.10.2** is still downloaded and built by
+  `compile-external-libs` for the physics parked in `attic/Physics/`. Nothing
+  in the build links it.
+- **cgltf**, **nlohmann/json** and **stb** are downloaded header-only
+  implementation dependencies. They are used only while compiling Compages and
+  are not installed as public headers.
+- **glad 2.0.8** is vendored and compiled inside the `GL45` backend. Its headers
+  remain private under `src/GPU/Backends/GL45/glad/`.
+- **Dear ImGui** is downloaded source compiled only into the example gallery;
+  it is not part of `libCompages` and is not installed.
+- **GLFW** is supplied by the operating system and used only by the examples and
+  GPU test harness. Applications may use another context/window toolkit.
+- **Compages-data** is downloaded for example assets and data-dependent tests.
+- **MyMakefile** is the Git submodule providing the build rules.
 
-This project depends on third-parts that are automatically downloaded with
-`make download-external-libs`. They are compiled as static libraries with
-`make compile-external-libs` but they are not installed on your operating
-system. It's onnly when the `sudo make install` is called that their header
-files are copied within the OpenGLCppWrapper header files.
+The former GLEW, SOIL, Bullet and bzip2 dependencies are not used.
 
-Here the list of third-parties:
-* [MyMakefile](https://github.com/Lecrapouille/MyMakefile) — the shared
-  Makefile machinery, cloned as a git submodule (hence `--recurse-submodules`
-  when you first clone).
-* [OpenGLCppWrapper-data](https://github.com/Lecrapouille/OpenGLCppWrapper-data)
-  — textures used by the examples, downloaded by the Makefile.
-* [stb_image](https://github.com/nothings/stb) — image decoding, vendored under
-  `src/GPU/Internal/`.
-* [Dear ImGui](https://github.com/ocornut/imgui) — the overlay of the
-  examples gallery, downloaded by `download-external-libs`.
-* [units](https://github.com/nholthaus/units) — SI units for angles, distances
-  and time. Downloaded by `download-external-libs`.
-* [backward-cpp](https://github.com/bombela/backward-cpp) — stack traces in
-  debug builds. Downloaded by `download-external-libs`.
-* [dbg-macro](https://github.com/sharkdp/dbg-macro) — a lightweight `dbg(x)`
-  macro, downloaded by `download-external-libs`.
-* [glad](https://github.com/Dav1dde/glad) — the OpenGL 4.5 loader, vendored
-  under `src/GPU/Backends/GL45/glad/`.
-* GLFW — the window and context toolkit used by the examples (system package).
-
-The GLEW / SOIL / bullet3 / json dependencies of the previous design are no
-longer used.
+Further reading: [tutorial](tutorials/Core.md),
+[architecture](Architecture.md), [design](Design.md), and
+[OpenGL traces](Traces.md).

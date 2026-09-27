@@ -1,6 +1,21 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
+//
+// This file is part of Compages.
+//
+// Compages is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Compages is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //
 // Inspired by the OpenGlassBox demo Host / UI theme.
 //=============================================================================
@@ -17,6 +32,7 @@ inline void applyGalleryTheme()
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
 
+    // Rounding and padding, so the docked panels read as one editor.
     style.WindowRounding = 6.0f;
     style.ChildRounding = 6.0f;
     style.FrameRounding = 4.0f;
@@ -38,6 +54,8 @@ inline void applyGalleryTheme()
     style.GrabMinSize = 10.0f;
     style.WindowTitleAlign = ImVec2(0.0f, 0.5f);
 
+    // A dark surface and one blue accent, used for hover, active and the
+    // docking preview.
     ImVec4* const colors = style.Colors;
     const ImVec4 background(0.09f, 0.10f, 0.12f, 0.94f);
     const ImVec4 surface(0.13f, 0.14f, 0.17f, 1.00f);

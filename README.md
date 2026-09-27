@@ -1,4 +1,4 @@
-# OpenGLCppWrapper
+# Compages
 
 A C++20 library for drawing and computing on the GPU without writing graphics-API
 calls. The `gpu::` layer is the foundation: OpenGL 4.5 core with Direct State
@@ -6,25 +6,44 @@ Access today, another backend tomorrow. Switching `GPU_BACKEND` in
 `Makefile.common` is how a second backend would be selected; nothing under
 `src/GPU/` except `src/GPU/Backends/` is allowed to include a `gl*` header.
 
-On top of `gpu::` sits a small simulation and rendering stack:
+Three layers, each usable without the next one:
 
-- `assets::` — shared `MeshAsset`, `Material`, `MaterialInstance`, owned by an
-  `AssetManager` and named by typed generational ids.
-- `world::` — an Entity/Component simulation with a `SpatialGraph`, a SoA
-  `TransformStore`, sparse-set `ComponentStore<T>`, pure-data components
-  (`Camera`, `Light`, `MeshRenderer`). Nothing in `world::` touches `gpu::`;
-  the whole layer runs headless.
-- `scene::` — a *view* on a World: which camera Entity, which clear colour,
-  which environment. Two Scenes can share one World.
-- `render::` — `Extractor::extract(scene) -> RenderSnapshot`, then
-  `Renderer::render(pass, snapshot, assets)`. The snapshot is a value; the
-  renderer never reaches back into the World.
+- **`gpu::`, the shader first.** A `gpu::Drawable` is a program plus the data
+  it reads, filled by the names the shader declares
+  (`triangle["position"] = {...}`) or from an interleaved C++ struct. Uniforms
+  and textures are set the same way, and everything is sent to the device at
+  the next draw.
+- **`scene::`, entities and components.** A headless `World` (EnTT inside)
+  where entities are created and composed flecs-style,
+  `world.entity("Ship").set(Velocity{}).child("Gun")`, and a `Scene` that
+  shows that World with Three.js-style shortcuts: `scene.box("Crate",
+  scene::texture("crate.jpg"))`, `scene.camera()`, `scene.sun()`,
+  `scene.load("Duck.glb")`.
+- **Behaviors, Unity-style.** `struct Spin : scene::Behavior { void
+  update(float dt) override; }` attached with `entity.add<Spin>(2.0f)`; it
+  reaches its entity, its transform, the input and the frame.
 
-This is not a game engine. No GameObject, no virtual `onDraw`, no animation, no
-physics, no input, no file loader. Behaviours are added by writing over
-components; a glTF or OBJ loader would deposit its results in the AssetManager
-and hand back ids. See [doc/Architecture.md](doc/Architecture.md) for the map
-of the layers, [doc/Design.md](doc/Design.md) for the *why*.
+```cpp
+scene::World world;
+scene::Scene scene(world);
+
+scene.camera().position(0, 2, 6).add<scene::Orbit>();
+scene.sun();
+scene.box("Crate", scene::texture("wooden-crate.jpg")).add<Spin>(1.0f);
+
+// every frame
+scene.draw(frame);
+```
+
+Errors are values (`compages::Result<T>`, `compages::Status`) where they can
+happen, at loading time. What goes wrong while drawing a frame is reported once,
+with a sentence naming both sides of the mismatch, and handed back by
+`Scene::prepare()` or `gpu::takeFrameError()`, so a frame does not need a
+check after every line. See [doc/Architecture.md](doc/Architecture.md) for the
+map of the layers and [doc/Design.md](doc/Design.md) for the *why*.
+
+Physics (the former ReactPhysics3D adapter) is parked in `attic/Physics/`,
+outside the build, until it is rewritten on top of the new `scene::` API.
 
 ## Quick start
 
@@ -32,7 +51,7 @@ The library never opens a window. GLFW, SDL or Qt does, then hands over a
 function that resolves driver symbols:
 
 ```cpp
-#include "GPU/GPU.hpp"
+#include <Compages/Compages.hpp>
 
 if (auto ready = gpu::init(glfwGetProcAddress); !ready)
 {
@@ -45,42 +64,41 @@ if (auto ready = gpu::init(glfwGetProcAddress); !ready)
 gpu::shutdown();
 ```
 
-A frame is a pass, a pipeline and a draw. The pipeline is where the C++ vertex
-layout is checked against the shader, once, at load time:
+The smallest picture is a shader and its data, filled by the names the shader
+declares:
 
 ```cpp
-struct Vertex { Vector2f position; Vector3f color; };
-static const gpu::VertexLayout LAYOUT = GPU_LAYOUT(Vertex, position, color);
+gpu::Drawable triangle;
+COMPAGES_TRY(triangle.load(vertex_src, fragment_src));
+triangle["position"] = { { -0.8f, -0.6f }, { 0.8f, -0.6f }, { 0.0f, 0.8f } };
+triangle["color"]    = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
 
-auto program = gpu::Program::fromSources(vertex_src, fragment_src);
-auto pipeline = gpu::Pipeline::create<Vertex>(program.value(), LAYOUT);
-auto vertices = gpu::Buffer<Vertex>::from(corners,
-                                          gpu::BufferKind::Vertex,
-                                          gpu::BufferUsage::Immutable);
-
-auto pass = gpu::RenderPass::begin({ .width = w, .height = h });
-gpu::Status drawn = gpu::draw(pipeline.value(), vertices.value());
+// every frame, inside the pass the window opened
+gpu::clear({ 0.1f, 0.1f, 0.15f });
+triangle.draw();
 ```
 
-Every call that can fail returns `gpu::Result<T>` or `gpu::Status`. `GPU_TRY`
-forwards the sentence the library wrote, which names both sides of the mismatch
-rather than a black screen.
+A misspelled attribute or a `vec2` given three numbers is reported with the
+list of what the shader really declares. The lower pieces (`Buffer<T>`,
+`Pipeline`, `draw`) are still there for the cases the Drawable does not cover.
 
 Build:
 
 ```
-git clone --recurse-submodules https://github.com/Lecrapouille/OpenGLCppWrapper.git
-cd OpenGLCppWrapper
+git clone --recurse-submodules https://github.com/Lecrapouille/Compages.git
+cd Compages
 make download-external-libs
 make compile-external-libs
-make -j8                 # the library
-make -j8 -C tests && ./build/OpenGLCppWrapper-UnitTest
-make -j8 -C examples && ./build/OpenGLCppWrapper-examples
+make -j8 all             # the library and gallery
+make -j8 -C tests all && ./build/Compages-UnitTest
+make -j8 -C examples all && ./build/Compages-examples
 ```
 
-`./build/OpenGLCppWrapper-examples --check` builds, draws and closes every
+`./build/Compages-examples --check` builds, draws and closes every
 example, and fails if any of them left a handle behind. That is the leak test
-as much as the smoke test.
+as much as the smoke test. `make -C examples check-contracts` is the
+standard-library-only static gate for the authoritative manifest, old-demo
+parity and documented logic budgets; building the gallery runs it automatically.
 
 More on building: [doc/Install.md](doc/Install.md). What each example is for:
 [examples/README.md](examples/README.md).
@@ -111,32 +129,31 @@ The `gpu::` layer:
 
 | Piece | What it does |
 |---|---|
-| `Buffer<T>`, `VertexArray<T>` | Memory on the device, with a CPU mirror and dirty ranges when vertices move |
+| `Drawable` | A program and the data it reads, by attribute name or from an interleaved struct; sent at the next draw |
+| `Buffer<T>` | Device memory; ergonomic `Buffer::from(range)` has a CPU mirror, dirty ranges and explicit/lazy upload |
 | `Shader`, `Program` | Compilation and a full reflection of attributes, blocks and samplers |
 | `Pipeline` | Program + C++ layout + render state, checked against each other once |
 | `Texture`, `Framebuffer` | Images, and a target that is not the window |
 | `UniformBlock` / `TypedUniformBlock<T>` | Shared uniforms at the offsets the driver chose, or at std140 |
 | `ComputeProgram`, `PingPong<T>`, `barrier` | Work that is not a picture |
 | `draw`, `drawIndexed`, `drawInstanced`, `drawIndirect` | Asking the device to draw |
-| `Result<T>`, `Status`, `GPU_TRY` | Failures come back as a sentence that names both sides |
+| `Result<T>`, `Status`, `COMPAGES_TRY`, `reportError` | Failures come back as a sentence that names both sides |
 
-The simulation & rendering stack on top:
+The `scene::` layer on top:
 
-| Layer | Piece | What it does |
-|---|---|---|
-| `assets::` | `AssetManager`, `MeshAsset`, `Material`, `MaterialInstance` | Owns shared resources, addressed by typed generational ids |
-| `world::`  | `World`, `Entity`, `SpatialGraph`, `TransformStore`, `ComponentStore<T>` | The simulation. Runs without a device. |
-| `world::`  | Components: `Camera`, `DirectionalLight`, `PointLight`, `MeshRenderer` | Pure data hung on Entities |
-| `scene::`  | `Scene`, `RenderSettings`, `Environment` | A view on a World |
-| `render::` | `Extractor`, `RenderSnapshot`, `RenderQueue`, `Renderer` | Snapshot the World, sort, draw |
+| Piece | What it does |
+|---|---|
+| `World`, `Entity` | The simulation, flecs-style: `entity()`, `set<T>()`, `get<T>()`, `child()`, `lookup("A/B")`, `each<T...>()`. Runs without a device. |
+| `Camera`, `DirectionalLight`, `PointLight`, `MeshRenderer` | Pure data hung on entities |
+| `Behavior`, `Orbit`, `Fly` | Code hung on entities: `start()` once, `update(dt)` every frame |
+| `Scene` | Shows a World: shapes and looks, cameras, lights, glTF loading, prefabs, skybox, picking, debug lines, `draw(frame)` |
+| `AssetManager`, `Prefab`, `MeshAsset`, `Material` | Resources, shared between entities and loaded separately from them |
+| `SceneExtractor`, `RenderSnapshot`, `Renderer` | Snapshot the World, sort, draw |
 
-Seventeen examples walk from a clear to a hundred thousand instanced sprites,
-a GPU cull whose count the CPU never reads, and three moving robots that share
-one mesh through the whole `world::`/`scene::`/`render::` pipeline. The older
-`GLVAO` / `GLProgram` demos sit in `examples/legacy/` and are not compiled.
-
-What is not here, and not started: an animation mixer, model loaders (glTF,
-OBJ), a second backend, a physics system.
+The example gallery walks from a clear to a hundred thousand instanced sprites,
+a GPU cull whose count the CPU never reads, and small scenes written with
+behaviors. The older `GLVAO` / `GLProgram` demos sit in `examples/legacy/` and
+are not compiled.
 
 ## Licence
 

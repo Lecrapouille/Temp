@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,13 +15,13 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "GPUContext.hpp"
 
-#include "GPU/GPU.hpp"
-#include "Math/Vector.hpp"
+#include "Compages/GPU/GPU.hpp"
+#include "Compages/Core/Vector.hpp"
 
 #include <array>
 #include <numeric>
@@ -126,6 +126,26 @@ TEST_F(BufferTest, GivesBackWhatWasPutIn)
 }
 
 //------------------------------------------------------------------------------
+TEST_F(BufferTest, UploadsOnlyWhenTheCpuMirrorIsAskedToSynchronize)
+{
+    const std::array<int, 4u> initial{ 1, 2, 3, 4 };
+    auto created = gpu::Buffer<int>::from(initial);
+    ASSERT_TRUE(bool(created)) << created.error();
+    auto buffer = created.take();
+    ASSERT_TRUE(buffer.mirrored());
+
+    buffer[2u] = 42;
+    auto before = buffer.read();
+    ASSERT_TRUE(bool(before)) << before.error();
+    ASSERT_EQ(before.value()[2u], 3);
+
+    ASSERT_TRUE(bool(buffer.upload()));
+    auto after = buffer.read();
+    ASSERT_TRUE(bool(after)) << after.error();
+    ASSERT_EQ(after.value()[2u], 42);
+}
+
+//------------------------------------------------------------------------------
 TEST_F(BufferTest, WritesPartOfABuffer)
 {
     auto created = gpu::Buffer<int>::create(
@@ -134,11 +154,11 @@ TEST_F(BufferTest, WritesPartOfABuffer)
     auto buffer = created.take();
 
     const std::array<int, 8u> zeroes{ 0, 0, 0, 0, 0, 0, 0, 0 };
-    ASSERT_TRUE(bool(buffer.write(zeroes)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { buffer.write(zeroes); })));
 
     // Three elements, starting at the fourth.
     const std::array<int, 3u> middle{ 7, 8, 9 };
-    auto written = buffer.write(middle, 3u);
+    auto written = gpu::attempt([&] { buffer.write(middle, 3u); });
     ASSERT_TRUE(bool(written)) << written.error();
 
     auto read = buffer.read();
@@ -156,7 +176,7 @@ TEST_F(BufferTest, WritesASingleElement)
     ASSERT_TRUE(bool(created)) << created.error();
     auto buffer = created.take();
 
-    ASSERT_TRUE(bool(buffer.write(42, 2u)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { buffer.write(42, 2u); })));
 
     auto read = buffer.read();
     ASSERT_TRUE(bool(read)) << read.error();
@@ -178,13 +198,13 @@ TEST_F(BufferTest, RefusesToWritePastTheEnd)
     auto buffer = created.take();
 
     const std::array<int, 5u> too_many{ 1, 2, 3, 4, 5 };
-    auto written = buffer.write(too_many);
+    auto written = gpu::attempt([&] { buffer.write(too_many); });
     ASSERT_FALSE(bool(written));
     ASSERT_THAT(written.error(), HasSubstr("past the end"));
 
     // Fits by itself, but not at that offset.
     const std::array<int, 2u> two{ 1, 2 };
-    auto offset = buffer.write(two, 3u);
+    auto offset = gpu::attempt([&] { buffer.write(two, 3u); });
     ASSERT_FALSE(bool(offset));
     ASSERT_THAT(offset.error(), HasSubstr("past the end"));
 }
@@ -198,7 +218,7 @@ TEST_F(BufferTest, RefusesToWriteAnImmutableBuffer)
     ASSERT_TRUE(bool(created)) << created.error();
     auto buffer = created.take();
 
-    auto written = buffer.write(0, 0u);
+    auto written = gpu::attempt([&] { buffer.write(0, 0u); });
     ASSERT_FALSE(bool(written));
     ASSERT_THAT(written.error(), HasSubstr("immutable"));
 }
@@ -377,6 +397,6 @@ TEST_F(BufferTest, SurvivesABufferOutlivingTheDevice)
     ASSERT_FALSE(buffer.valid());
 
     const std::array<int, 1u> one{ 1 };
-    ASSERT_FALSE(bool(buffer.write(one)));
+    ASSERT_FALSE(bool(gpu::attempt([&] { buffer.write(one); })));
     // And its destructor, running after this test, must not touch the driver.
 }

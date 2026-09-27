@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,12 +15,12 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "GPUContext.hpp"
 
-#include "GPU/GPU.hpp"
+#include "Compages/GPU/GPU.hpp"
 
 using namespace tests;
 
@@ -403,7 +403,7 @@ TEST_F(ShaderTest, SaysWhenAUniformLivesInABlock)
 {
     auto program = gpu::Program::fromSources(PLAIN_VERTEX, BLOCK_FRAGMENT).take();
 
-    auto written = program.set("exposure", 1.0f);
+    auto written = gpu::attempt([&] { program.set("exposure", 1.0f); });
     ASSERT_FALSE(bool(written));
     ASSERT_THAT(written.error(), HasSubstr("uniform block 'Frame'"));
 }
@@ -471,13 +471,13 @@ TEST_F(ShaderTest, SetsAUniform)
     auto program = gpu::Program::fromSources(VERTEX, FRAGMENT).take();
 
     const Matrix44f model(matrix::Identity);
-    auto written = program.set("uModel", model);
+    auto written = gpu::attempt([&] { program.set("uModel", model); });
     ASSERT_TRUE(bool(written)) << written.error();
 
-    ASSERT_TRUE(bool(program.set("uTint", Vector4f(1.0f, 0.5f, 0.0f, 1.0f))));
-    ASSERT_TRUE(bool(program.set("uGamma", 2.2f)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { program.set("uTint", Vector4f(1.0f, 0.5f, 0.0f, 1.0f)); })));
+    ASSERT_TRUE(bool(gpu::attempt([&] { program.set("uGamma", 2.2f); })));
     // A sampler is set by giving it the number of a texture unit.
-    ASSERT_TRUE(bool(program.set("uTexture", 0)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { program.set("uTexture", 0); })));
 }
 
 //------------------------------------------------------------------------------
@@ -489,7 +489,7 @@ TEST_F(ShaderTest, RefusesAUniformTheShaderDoesNotDeclare)
 {
     auto program = gpu::Program::fromSources(VERTEX, FRAGMENT).take();
 
-    auto written = program.set("uModelMatrix", 1.0f);
+    auto written = gpu::attempt([&] { program.set("uModelMatrix", 1.0f); });
     ASSERT_FALSE(bool(written));
     ASSERT_THAT(written.error(), HasSubstr("uModelMatrix"));
     // The list of what does exist, so the real name can be spotted.
@@ -505,7 +505,7 @@ TEST_F(ShaderTest, RefusesAUniformSetWithTheWrongType)
 {
     auto program = gpu::Program::fromSources(VERTEX, FRAGMENT).take();
 
-    auto written = program.set("uModel", Vector4f(0.0f, 0.0f, 0.0f, 1.0f));
+    auto written = gpu::attempt([&] { program.set("uModel", Vector4f(0.0f, 0.0f, 0.0f, 1.0f)); });
     ASSERT_FALSE(bool(written));
     ASSERT_THAT(written.error(), HasSubstr("declares 'uModel' as mat4"));
     ASSERT_THAT(written.error(), HasSubstr("set as vec4"));
@@ -526,7 +526,7 @@ void main() { oColor = vec4(1.0); }
 
     ASSERT_EQ(program.reflection().uniform("uNeverRead"), nullptr);
 
-    auto written = program.set("uNeverRead", Vector4f(1.0f, 1.0f, 1.0f, 1.0f));
+    auto written = gpu::attempt([&] { program.set("uNeverRead", Vector4f(1.0f, 1.0f, 1.0f, 1.0f)); });
     ASSERT_FALSE(bool(written));
     ASSERT_THAT(written.error(), HasSubstr("never reads it"));
 }
@@ -572,7 +572,7 @@ TEST_F(ShaderTest, RefusesToUseAProgramThatIsGone)
     ASSERT_FALSE(program.valid());
     ASSERT_TRUE(program.reflection().attributes.empty());
 
-    auto written = program.set("uGamma", 1.0f);
+    auto written = gpu::attempt([&] { program.set("uGamma", 1.0f); });
     ASSERT_FALSE(bool(written));
     ASSERT_THAT(written.error(), HasSubstr("no longer exists"));
 }

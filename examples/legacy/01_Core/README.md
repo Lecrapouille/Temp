@@ -1,8 +1,8 @@
 ## Core OpenGL Tutorials
 
 This group of tutorials will show you how to create, manipulate and render OpenGL
-objects. These examples show the goal of OpenGLCppWrapper: from given program shaders
-(fragment, vertex), OpenGLCppWrapper will create for you OpenGL objects: VAO, VBO,
+objects. These examples show the goal of Compages: from given program shaders
+(fragment, vertex), Compages will create for you OpenGL objects: VAO, VBO,
 EBO, textures (1D, 2D, 3D, Cube), framebuffer. You only have to fill data to them (vertices,
 colors, texture coordinates, load JPEG picture ...) and manipulate these data from CPU:
 all modified data will be transfered to GPU.

@@ -1,26 +1,26 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/UniformBlock.hpp"
+#include "Compages/GPU/UniformBlock.hpp"
 #include "GPU/Backends/Backend.hpp"
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Device.hpp"
 #include "GPU/Internal/Pools.hpp"
 
 #include <cstring>
@@ -146,17 +146,20 @@ Result<UniformBlock> UniformBlock::create(Program& p_program,
     int binding = info.binding;
     if (p_binding >= 0)
     {
-        GPU_TRY(p_program.bindUniformBlock(p_name, p_binding));
+        COMPAGES_TRY(p_program.bindUniformBlock(p_name, p_binding));
         binding = p_binding;
     }
 
     // Dynamic rather than Immutable: a block whose contents never change would be
     // better made immutable, but it is not what a block is for, and the cost of
     // being wrong the other way round is a buffer that cannot be written at all.
-    GPU_TRY_ASSIGN(
-        buffer,
-        Buffer<std::byte>::create(info.bytes, BufferKind::Uniform,
-                                  BufferUsage::Dynamic));
+    auto buffer_result = Buffer<std::byte>::create(info.bytes, BufferKind::Uniform,
+                                  BufferUsage::Dynamic);
+    if (!buffer_result)
+    {
+        return compages::failure(buffer_result.error());
+    }
+    auto buffer = buffer_result.take();
 
     return UniformBlock(std::move(buffer), std::move(info), binding);
 }
@@ -375,8 +378,8 @@ Status UniformBlock::update()
 
     const std::size_t first = m_dirty.begin();
     const std::size_t count = m_dirty.end() - first;
-    GPU_TRY(m_buffer.write(
-        std::span<const std::byte>(m_bytes.data() + first, count), first));
+    COMPAGES_TRY(detail::writeBuffer(
+        m_buffer.handle(), first, count, m_bytes.data() + first));
     m_dirty.clear();
     return success();
 }
@@ -384,7 +387,7 @@ Status UniformBlock::update()
 //------------------------------------------------------------------------------
 Status UniformBlock::bind()
 {
-    GPU_TRY(update());
+    COMPAGES_TRY(update());
 
     detail::BufferRecord const* record =
         detail::pools().buffers.get(m_buffer.handle());

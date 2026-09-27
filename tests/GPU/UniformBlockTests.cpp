@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,12 +15,12 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "GPUContext.hpp"
 
-#include "GPU/GPU.hpp"
+#include "Compages/GPU/GPU.hpp"
 
 #include <cstring>
 #include <vector>
@@ -516,12 +516,12 @@ TEST_F(UniformBlockTest, TheShaderReadsWhatWasWritten)
                                               gpu::BufferKind::Vertex,
                                               gpu::BufferUsage::Immutable)
                         .take();
-    const gpu::VertexLayout layout = GPU_LAYOUT(Corner, position);
+    const gpu::VertexLayout layout = gpu::VertexLayout::of<Corner>();
     auto pipeline = gpu::Pipeline::create<Corner>(program, layout).take();
 
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
-    ASSERT_TRUE(bool(gpu::draw(pipeline, vertices)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline, vertices); })));
 
     auto picture = gpu::readPixels();
     ASSERT_TRUE(bool(picture)) << picture.error();
@@ -553,7 +553,7 @@ TEST_F(UniformBlockTest, OneBlockFeedsTwoPrograms)
                                               gpu::BufferKind::Vertex,
                                               gpu::BufferUsage::Immutable)
                         .take();
-    const gpu::VertexLayout layout = GPU_LAYOUT(Corner, position);
+    const gpu::VertexLayout layout = gpu::VertexLayout::of<Corner>();
     auto left = gpu::Pipeline::create<Corner>(first, layout).take();
     auto right = gpu::Pipeline::create<Corner>(second, layout).take();
 
@@ -564,7 +564,7 @@ TEST_F(UniformBlockTest, OneBlockFeedsTwoPrograms)
               .color = { 0.0f, 0.0f, 0.0f, 1.0f },
               .target = {} });
         ASSERT_TRUE(bool(pass)) << pass.error();
-        ASSERT_TRUE(bool(gpu::draw(left, vertices)));
+        ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(left, vertices); })));
     }
     {
         auto pass = gpu::RenderPass::begin(
@@ -574,7 +574,7 @@ TEST_F(UniformBlockTest, OneBlockFeedsTwoPrograms)
               .color = { 0.0f, 0.0f, 0.0f, 1.0f },
               .target = {} });
         ASSERT_TRUE(bool(pass)) << pass.error();
-        ASSERT_TRUE(bool(gpu::draw(right, vertices)));
+        ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(right, vertices); })));
     }
 
     auto whole = gpu::RenderPass::begin({ .width = WIDTH,
@@ -612,12 +612,12 @@ TEST_F(UniformBlockTest, BindSendsWhatWasWritten)
                                               gpu::BufferKind::Vertex,
                                               gpu::BufferUsage::Immutable)
                         .take();
-    const gpu::VertexLayout layout = GPU_LAYOUT(Corner, position);
+    const gpu::VertexLayout layout = gpu::VertexLayout::of<Corner>();
     auto pipeline = gpu::Pipeline::create<Corner>(program, layout).take();
 
     auto pass = gpu::RenderPass::begin(wholeTarget());
     ASSERT_TRUE(bool(pass)) << pass.error();
-    ASSERT_TRUE(bool(gpu::draw(pipeline, vertices)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline, vertices); })));
 
     auto picture = gpu::readPixels();
     ASSERT_TRUE(bool(picture)) << picture.error();

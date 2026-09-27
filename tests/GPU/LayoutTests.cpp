@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,12 +15,14 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "main.hpp"
 
-#include "GPU/Core/Layout.hpp"
+#include "Compages/GPU/Core/Layout.hpp"
+
+#include <cstddef>
 
 namespace
 {
@@ -38,6 +40,35 @@ struct SmallVertex
 {
     Vector3f position;
     Vector<std::uint8_t, 4u> color;
+};
+
+//! \brief A byte followed by a float, which the compiler pads.
+struct Padded
+{
+    std::uint8_t flag;
+    float weight;
+};
+
+//! \brief The smallest vertex there is.
+struct Single
+{
+    Vector2f position;
+};
+
+//! \brief As many fields as reflection accepts.
+struct Crowded
+{
+    float a, b, c, d, e, f, g, h, i, j, k, l, m, n, o;
+    float last_one;
+};
+
+//! \brief A vertex declared inside a class, as the examples do.
+struct Outer
+{
+    struct Nested
+    {
+        Vector3f where;
+    };
 };
 
 } // namespace
@@ -186,35 +217,146 @@ TEST(Layout, CountsTheAttributeSlotsTheVertexTakes)
 }
 
 //------------------------------------------------------------------------------
-// The macro is sugar and nothing more: it must produce exactly what writing the
+// Reading the layout off the struct must produce exactly what writing the
 // fields out by hand produces, with the member names as the shader names.
 //------------------------------------------------------------------------------
-TEST(Layout, MacroDescribesTheSameThingAsTheExplicitForm)
+TEST(Layout, ReadOffTheStructDescribesTheSameThingAsTheExplicitForm)
 {
-    const gpu::VertexLayout sugar = GPU_LAYOUT(Vertex, position, normal, uv);
+    const gpu::VertexLayout read = gpu::VertexLayout::of<Vertex>();
     const gpu::VertexLayout explicit_form =
         gpu::describe<Vertex>(gpu::field(&Vertex::position, "position"),
                               gpu::field(&Vertex::normal, "normal"),
                               gpu::field(&Vertex::uv, "uv"));
 
-    ASSERT_EQ(sugar.stride(), explicit_form.stride());
-    ASSERT_EQ(sugar.fields().size(), explicit_form.fields().size());
-    for (std::size_t i = 0u; i < sugar.fields().size(); ++i)
+    ASSERT_TRUE(bool(read.validate())) << read.validate().error();
+    ASSERT_EQ(read.stride(), explicit_form.stride());
+    ASSERT_EQ(read.fields().size(), explicit_form.fields().size());
+    for (std::size_t i = 0u; i < read.fields().size(); ++i)
     {
-        ASSERT_EQ(sugar.fields()[i].name, explicit_form.fields()[i].name);
-        ASSERT_EQ(sugar.fields()[i].offset, explicit_form.fields()[i].offset);
-        ASSERT_EQ(sugar.fields()[i].format.components,
+        ASSERT_EQ(read.fields()[i].name, explicit_form.fields()[i].name);
+        ASSERT_EQ(read.fields()[i].offset, explicit_form.fields()[i].offset);
+        ASSERT_EQ(read.fields()[i].format.components,
                   explicit_form.fields()[i].format.components);
     }
 }
 
 //------------------------------------------------------------------------------
-TEST(Layout, MacroWorksWithASingleField)
+// The compiler finds the count, the names and the types of the fields, at
+// compile time: these are static_asserts, not run time checks.
+//------------------------------------------------------------------------------
+TEST(Layout, ReflectionFindsNamesAndTypesAtCompileTime)
 {
-    const gpu::VertexLayout layout = GPU_LAYOUT(Vertex, position);
+    static_assert(gpu::reflect::fieldCount<Vertex>() == 3u);
+    static_assert(gpu::reflect::fieldName<Vertex, 0u>() == "position");
+    static_assert(gpu::reflect::fieldName<Vertex, 2u>() == "uv");
+    static_assert(std::is_same_v<gpu::reflect::FieldType<Vertex, 1u>, Vector3f>);
+    static_assert(gpu::reflect::fieldCount<Crowded>() == 16u);
+    static_assert(gpu::reflect::fieldName<Crowded, 15u>() == "last_one");
+    static_assert(gpu::reflect::fieldName<Outer::Nested, 0u>() == "where");
+    SUCCEED();
+}
+
+//------------------------------------------------------------------------------
+// Offsets come from the compiler too, padding included.
+//------------------------------------------------------------------------------
+TEST(Layout, ReadOffTheStructFindsPaddedOffsets)
+{
+    const gpu::VertexLayout layout = gpu::VertexLayout::of<Padded>();
+
+    ASSERT_EQ(layout.stride(), sizeof(Padded));
+    ASSERT_EQ(layout.fields()[0].name, "flag");
+    ASSERT_EQ(layout.fields()[1].name, "weight");
+    ASSERT_EQ(layout.fields()[1].offset, offsetof(Padded, weight));
+    ASSERT_EQ(layout.fields()[1].format.scalar, gpu::ScalarType::Float);
+    ASSERT_TRUE(layout.fields()[0].format.as_integer);
+}
+
+//------------------------------------------------------------------------------
+TEST(Layout, ReadOffTheStructWorksWithASingleField)
+{
+    const gpu::VertexLayout layout = gpu::VertexLayout::of<Single>();
 
     ASSERT_EQ(layout.fields().size(), 1u);
     ASSERT_EQ(layout.fields()[0].name, "position");
+    ASSERT_EQ(layout.stride(), sizeof(Single));
+}
+
+//------------------------------------------------------------------------------
+// When the shader calls it something else, the field is renamed, not the
+// struct.
+//------------------------------------------------------------------------------
+TEST(Layout, RenamesAFieldToTheNameTheShaderUses)
+{
+    const gpu::VertexLayout layout =
+        gpu::VertexLayout::of<Vertex>().rename("position", "aPosition");
+
+    ASSERT_TRUE(bool(layout.validate())) << layout.validate().error();
+    ASSERT_NE(layout.find("aPosition"), nullptr);
+    ASSERT_EQ(layout.find("position"), nullptr);
+}
+
+//------------------------------------------------------------------------------
+// A misspelled field is reported when the layout is checked, with the fields
+// it could have meant.
+//------------------------------------------------------------------------------
+TEST(Layout, SaysWhichFieldsExistWhenRenamingOneThatDoesNot)
+{
+    const gpu::VertexLayout layout =
+        gpu::VertexLayout::of<Vertex>().rename("pos", "aPosition");
+
+    auto checked = layout.validate();
+    ASSERT_FALSE(checked);
+    EXPECT_THAT(checked.error(), HasSubstr("'pos'"));
+    EXPECT_THAT(checked.error(), HasSubstr("position, normal, uv"));
+}
+
+//------------------------------------------------------------------------------
+// Renaming a field onto the name of another one is two fields of one name.
+//------------------------------------------------------------------------------
+TEST(Layout, RefusesARenameThatCollidesWithAnotherField)
+{
+    const gpu::VertexLayout layout =
+        gpu::VertexLayout::of<Vertex>().rename("normal", "position");
+
+    auto checked = layout.validate();
+    ASSERT_FALSE(checked);
+    EXPECT_THAT(checked.error(), HasSubstr("two fields are both named"));
+}
+
+//------------------------------------------------------------------------------
+TEST(Layout, MarksFieldsPerInstanceByNameOrAllAtOnce)
+{
+    const gpu::VertexLayout one =
+        gpu::VertexLayout::of<Vertex>().perInstance("uv");
+    ASSERT_FALSE(one.find("position")->per_instance);
+    ASSERT_TRUE(one.find("uv")->per_instance);
+
+    const gpu::VertexLayout all = gpu::VertexLayout::of<Vertex>().perInstance();
+    ASSERT_TRUE(all.find("position")->per_instance);
+    ASSERT_TRUE(all.find("normal")->per_instance);
+    ASSERT_TRUE(all.hasPerInstanceFields());
+}
+
+//------------------------------------------------------------------------------
+TEST(Layout, NormalizesAnIntegerFieldByName)
+{
+    const gpu::VertexLayout layout =
+        gpu::VertexLayout::of<SmallVertex>().normalized("color");
+
+    ASSERT_TRUE(bool(layout.validate())) << layout.validate().error();
+    ASSERT_TRUE(layout.find("color")->format.normalized);
+    ASSERT_FALSE(layout.find("color")->format.as_integer);
+}
+
+//------------------------------------------------------------------------------
+TEST(Layout, RefusesToNormalizeAFloatField)
+{
+    const gpu::VertexLayout layout =
+        gpu::VertexLayout::of<SmallVertex>().normalized("position");
+
+    auto checked = layout.validate();
+    ASSERT_FALSE(checked);
+    EXPECT_THAT(checked.error(), HasSubstr("whole numbers"));
 }
 
 //------------------------------------------------------------------------------

@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,12 +15,12 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "GPUContext.hpp"
 
-#include "GPU/GPU.hpp"
+#include "Compages/GPU/GPU.hpp"
 
 #include <vector>
 
@@ -165,7 +165,7 @@ TEST_F(ComputeTest, DoublesWhatIsInTheBuffer)
     ASSERT_EQ(compute.value().workGroupSize()[0], 64);
 
     ASSERT_TRUE(bool(compute.value().bind("Values", buffer)));
-    ASSERT_TRUE(bool(compute.value().set("count", 64u)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { compute.value().set("count", 64u); })));
     auto ran = compute.value().dispatchItems(64u);
     ASSERT_TRUE(bool(ran)) << ran.error();
 
@@ -175,6 +175,59 @@ TEST_F(ComputeTest, DoublesWhatIsInTheBuffer)
     ASSERT_EQ(back.value().size(), 64u);
     ASSERT_FLOAT_EQ(back.value()[0], 6.0f);
     ASSERT_FLOAT_EQ(back.value()[63], 6.0f);
+}
+
+//------------------------------------------------------------------------------
+TEST_F(ComputeTest, ErgonomicDispatchSynchronizesOneMirroredBuffer)
+{
+    const std::vector<float> start(64u, 3.0f);
+    gpu::BufferOptions options;
+    options.kind = gpu::BufferKind::Storage;
+    options.usage = gpu::BufferUsage::Storage;
+    auto buffer = gpu::Buffer<float>::from(start, options).take();
+    buffer[0u] = 4.0f;
+
+    auto compute = gpu::ComputeProgram::fromSource(DOUBLE_SOURCE).take();
+    ASSERT_TRUE(bool(gpu::attempt([&] { compute.set("count", 64u); })));
+    auto ran = gpu::dispatch(compute, buffer);
+    ASSERT_TRUE(bool(ran)) << ran.error();
+    auto downloaded = buffer.download();
+    ASSERT_TRUE(bool(downloaded)) << downloaded.error();
+
+    auto const& values = static_cast<gpu::Buffer<float> const&>(buffer);
+    ASSERT_FLOAT_EQ(values[0u], 8.0f);
+    ASSERT_FLOAT_EQ(values[63u], 6.0f);
+}
+
+//------------------------------------------------------------------------------
+TEST_F(ComputeTest, ErgonomicDispatchRequiresExactlyOneStorageBlock)
+{
+    const std::vector<float> start(64u, 1.0f);
+    gpu::BufferOptions options;
+    options.kind = gpu::BufferKind::Storage;
+    options.usage = gpu::BufferUsage::Storage;
+    auto buffer = gpu::Buffer<float>::from(start, options).take();
+    auto compute = gpu::ComputeProgram::fromSource(PING_SOURCE).take();
+
+    auto ran = gpu::dispatch(compute, buffer);
+    ASSERT_FALSE(bool(ran));
+    ASSERT_THAT(ran.error(), HasSubstr("exactly one"));
+    ASSERT_THAT(ran.error(), HasSubstr("2"));
+}
+
+//------------------------------------------------------------------------------
+TEST_F(ComputeTest, DownloadRefusesABufferWithoutCpuMirror)
+{
+    const std::vector<float> start(4u, 1.0f);
+    auto buffer = gpu::Buffer<float>::from(
+                      std::span<const float>(start),
+                      gpu::BufferKind::Storage,
+                      gpu::BufferUsage::Storage)
+                      .take();
+
+    auto downloaded = buffer.download();
+    ASSERT_FALSE(bool(downloaded));
+    ASSERT_THAT(downloaded.error(), HasSubstr("CPU mirror"));
 }
 
 //------------------------------------------------------------------------------
@@ -188,7 +241,7 @@ TEST_F(ComputeTest, PingPongWritesTheOtherBuffer)
     auto compute = gpu::ComputeProgram::fromSource(PING_SOURCE).take();
     ASSERT_TRUE(bool(compute.bind("Input", stars.input())));
     ASSERT_TRUE(bool(compute.bind("Output", stars.output())));
-    ASSERT_TRUE(bool(compute.set("count", 64u)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { compute.set("count", 64u); })));
     ASSERT_TRUE(bool(compute.dispatchItems(64u)));
 
     gpu::barrier(gpu::Barrier::Storage);
@@ -212,7 +265,7 @@ TEST_F(ComputeTest, AStorageBufferCanThenBeDrawnAsVertices)
     gpu::barrier(gpu::Barrier::VertexAttrib);
 
     auto program = gpu::Program::fromSources(POINT_VERTEX, RED_FRAGMENT).take();
-    const gpu::VertexLayout layout = GPU_LAYOUT(Particle, position);
+    const gpu::VertexLayout layout = gpu::VertexLayout::of<Particle>();
     gpu::RenderState state;
     state.primitive = gpu::Primitive::Points;
     auto pipeline = gpu::Pipeline::create<Particle>(program, layout, state).take();
@@ -224,7 +277,7 @@ TEST_F(ComputeTest, AStorageBufferCanThenBeDrawnAsVertices)
     desc.target = {};
     auto pass = gpu::RenderPass::begin(desc);
     ASSERT_TRUE(bool(pass)) << pass.error();
-    ASSERT_TRUE(bool(gpu::draw(pipeline, particles)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { gpu::draw(pipeline, particles); })));
 
     auto picture = gpu::readPixels();
     ASSERT_TRUE(bool(picture)) << picture.error();
@@ -281,7 +334,7 @@ TEST_F(ComputeTest, CountsADispatch)
                       64u, gpu::BufferKind::Storage, gpu::BufferUsage::Storage)
                       .take();
     ASSERT_TRUE(bool(compute.bind("Values", buffer)));
-    ASSERT_TRUE(bool(compute.set("count", 64u)));
+    ASSERT_TRUE(bool(gpu::attempt([&] { compute.set("count", 64u); })));
     ASSERT_TRUE(bool(compute.dispatchItems(64u)));
     ASSERT_EQ(gpu::frameStatistics().dispatches, 1u);
 }

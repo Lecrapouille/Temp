@@ -1,21 +1,21 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
 #include "GPU/Backends/GL45/GL45.hpp"
@@ -132,15 +132,35 @@ void GLAD_API_PTR onDriverMessage(GLenum p_source,
         return;
     }
 
+    // "Shader recompiled based on state", "buffer moved to host memory", and
+    // remarks of low severity such as "a clear of part of the target made the
+    // driver fall back from one antialiasing method to another": what to read
+    // when hunting a slowdown, not a mistake in the frame.
+    const bool hint = (p_type == GL_DEBUG_TYPE_PERFORMANCE) ||
+                      ((p_type == GL_DEBUG_TYPE_OTHER) &&
+                       (p_severity == GL_DEBUG_SEVERITY_LOW));
+    if (hint && !driverHintsReported())
+    {
+        return;
+    }
+
     LogLevel level = LogLevel::Warning;
     if ((p_type == GL_DEBUG_TYPE_ERROR) ||
         (p_type == GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR))
     {
         level = LogLevel::Error;
     }
+    else if (hint)
+    {
+        level = LogLevel::Info;
+    }
 
+    char const* severity = (p_severity == GL_DEBUG_SEVERITY_HIGH)     ? "high"
+                           : (p_severity == GL_DEBUG_SEVERITY_MEDIUM) ? "medium"
+                                                                      : "low";
     std::string text = std::string(sourceName(p_source)) + " " +
-                       typeName(p_type) + " #" + std::to_string(p_id) + ": " +
+                       typeName(p_type) + " #" + std::to_string(p_id) + " (" +
+                       severity + "): " +
                        (p_message != nullptr ? p_message : "(no message)");
     log(level, text);
 }

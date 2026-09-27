@@ -1,21 +1,21 @@
 ##=====================================================================
-## OpenGLCppWrapper: A C++20 OpenGL wrapper.
+## Compages: A C++20 OpenGL wrapper.
 ## Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 ##
-## This file is part of OpenGLCppWrapper.
+## This file is part of Compages.
 ##
-## OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+## Compages is free software: you can redistribute it and/or modify it
 ## under the terms of the GNU General Public License as published by
 ## the Free Software Foundation, either version 3 of the License, or
 ## (at your option) any later version.
 ##
-## OpenGLCppWrapper is distributed in the hope that it will be useful, but
+## Compages is distributed in the hope that it will be useful, but
 ## WITHOUT ANY WARRANTY; without even the implied warranty of
 ## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ## General Public License for more details.
 ##
 ## You should have received a copy of the GNU General Public License
-## along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+## along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 ##=====================================================================
 
 ###################################################
@@ -51,7 +51,7 @@ IMGUI_WARNINGS := -Wno-conversion -Wno-old-style-cast -Wno-sign-conversion \
   -Wno-switch-default -Wno-useless-cast -Wno-zero-as-null-pointer-constant \
   -Wno-suggest-attribute=noreturn -Wno-format-nonliteral
 IMGUI_OBJS := $(patsubst $(abspath $(P))/%,%,$(foreach f, \
-  $(IMGUI_FILES) $(P)/examples/Common/Gallery.cpp,$(abspath $f)))
+  $(IMGUI_FILES) $(P)/examples/Common/Gallery.cpp $(P)/examples/Common/GalleryPanels.cpp,$(abspath $f)))
 IMGUI_OBJS := $(addprefix $(OBJS_ROOT_DIR)/,$(addsuffix .o,$(basename $(IMGUI_OBJS))))
 $(IMGUI_OBJS): USER_CXXFLAGS += $(IMGUI_WARNINGS)
 
@@ -61,10 +61,11 @@ $(IMGUI_OBJS): USER_CXXFLAGS += $(IMGUI_WARNINGS)
 # examples/legacy is kept as a reference of the previous API and is not compiled.
 #
 SRC_FILES += $(filter-out $(P)/examples/legacy/%,$(call rwildcard,$(P)/examples,*.cpp))
-INCLUDES += $(P)/examples $(P)/src $(THIRD_PARTIES_DIR)
+INCLUDES += $(P)/examples $(P)/include $(THIRD_PARTIES_DIR)
 INCLUDES += $(THIRD_PARTIES_DIR)/units/include
 INCLUDES += $(THIRD_PARTIES_DIR)/stb
 INCLUDES += $(THIRD_PARTIES_DIR)/cgltf
+INCLUDES += $(THIRD_PARTIES_DIR)/entt/src
 VPATH += $(P)/examples
 INTERNAL_LIBS := $(call internal-lib,$(PROJECT_NAME))
 
@@ -83,3 +84,15 @@ endif
 # Generic Makefile rules
 #
 include $(M)/rules/Makefile
+
+# Linked again whenever the library changes, not only when an example does.
+$(TARGET_BINARY_NAME): $(INTERNAL_LIBS)
+
+###################################################
+# Executable gallery contracts (manifest, parity and line budgets)
+#
+.PHONY: check-contracts
+check-contracts:
+	$(Q)python3 check_contracts.py
+
+all: check-contracts

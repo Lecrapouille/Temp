@@ -1,26 +1,27 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
 #pragma once
 
-#include "GPU/GPU.hpp"
+#include "Compages/GPU/GPU.hpp"
+#include "Compages/Scene/Frame.hpp"
 
 #include <memory>
 #include <string>
@@ -29,9 +30,10 @@
 //! \file
 //! \brief What every example is, seen from the gallery.
 //!
-//! Four things and no more: a name, a sentence saying what it demonstrates, a
-//! way to set itself up, and a way to draw one frame. Everything else, the
-//! window, the loop, the timing, the overlay, belongs to the gallery.
+//! Four things: a name, a sentence saying what it demonstrates, a way to set
+//! itself up, and a way to draw one frame. A fifth, optional, puts a few
+//! controls of its own into the "Try it" panel. Everything else, the window,
+//! the loop, the timing, the overlay, belongs to the gallery.
 //!
 //! There is deliberately no tear down. An example holds its resources as members,
 //! and destroying it releases them, which is the same rule as everywhere else in
@@ -44,74 +46,9 @@
 namespace examples
 {
 
-// ****************************************************************************
-//! \brief What the gallery tells an example about the frame it is drawing.
-// ****************************************************************************
-struct Frame
-{
-    //! \brief How wide the window is now, in pixels. Changes when the window is
-    //! resized, so an example computing a projection has to read it every frame
-    //! rather than once.
-    std::uint32_t width = 0u;
-    //! \brief How tall the window is now.
-    std::uint32_t height = 0u;
-    //! \brief How long the previous frame took, in seconds. What to multiply a
-    //! speed by so that an animation runs at the same rate whatever the frame
-    //! rate.
-    float elapsed = 0.0f;
-    //! \brief How long since this example was set up, in seconds. Reset when the
-    //! example is switched to, so an animation always starts from the beginning.
-    float total = 0.0f;
-
-    //! \brief Where the mouse is, in pixels from the bottom left corner, counted
-    //! the way the graphics API counts rather than the way the window system does.
-    Vector2f mouse{ 0.0f, 0.0f };
-    //! \brief Mouse motion this frame, y up. Zero when the overlay ate the
-    //! pointer.
-    Vector2f mouse_delta{ 0.0f, 0.0f };
-    //! \brief Scroll wheel this frame. Positive is away from the user.
-    float scroll = 0.0f;
-    bool mouse_left = false;
-    bool mouse_right = false;
-    //! \brief Rising edge of the left button, for a click-to-pick.
-    bool mouse_left_pressed = false;
-    bool key_w = false;
-    bool key_a = false;
-    bool key_s = false;
-    bool key_d = false;
-    bool key_q = false;
-    bool key_e = false;
-    bool key_shift = false;
-    bool key_1 = false;
-    bool key_2 = false;
-    bool key_3 = false;
-
-    // ------------------------------------------------------------------------
-    //! \brief How much wider than tall the window is. What a projection needs so
-    //! that a square stays square.
-    // ------------------------------------------------------------------------
-    [[nodiscard]] float aspect() const
-    {
-        return (height == 0u) ? 1.0f
-                              : static_cast<float>(width) /
-                                    static_cast<float>(height);
-    }
-
-    // ------------------------------------------------------------------------
-    //! \brief Where the mouse is, as the clip space the vertex shader works in:
-    //! minus one at the left and bottom edges, plus one at the right and top.
-    // ------------------------------------------------------------------------
-    [[nodiscard]] Vector2f mouseInClipSpace() const
-    {
-        if ((width == 0u) || (height == 0u))
-        {
-            return Vector2f(0.0f, 0.0f);
-        }
-        return Vector2f(
-            ((mouse.x / static_cast<float>(width)) * 2.0f) - 1.0f,
-            ((mouse.y / static_cast<float>(height)) * 2.0f) - 1.0f);
-    }
-};
+//! \brief What the gallery tells an example about the frame it draws: the
+//! size, the time and the input. \c total restarts when the example is chosen.
+using Frame = scene::Frame;
 
 // ****************************************************************************
 //! \brief One demonstration, of one idea.
@@ -146,19 +83,50 @@ public:
     //! reason reaches the gallery and appears on the screen instead of being
     //! thrown.
     //!
-    //! \return why the example cannot run.
+    //! \return why the example cannot run. A frame error recorded during the
+    //! set up (a misspelled attribute, say) counts as a failure too.
     // ------------------------------------------------------------------------
     [[nodiscard]] virtual gpu::Status setUp() = 0;
 
     // ------------------------------------------------------------------------
     //! \brief Draw one frame.
     //!
+    //! The gallery has already opened a pass over the whole window, so drawing
+    //! to the screen needs no pass of its own: gpu::clear() then draw.
+    //! Whatever goes wrong is the frame error (see gpu/Errors.hpp), which the
+    //! gallery reads after the frame: it stops the example and shows the
+    //! reason rather than repeating the same failure sixty times a second.
+    //!
     //! \param[in] p_frame the size of the window and how much time has passed.
-    //! \return why the frame could not be drawn. The gallery stops the example
-    //! and shows the reason rather than repeating the same failure sixty times a
-    //! second.
     // ------------------------------------------------------------------------
-    [[nodiscard]] virtual gpu::Status draw(Frame const& p_frame) = 0;
+    virtual void draw(Frame const& p_frame) = 0;
+
+    // ------------------------------------------------------------------------
+    //! \brief Draw a few Dear ImGui widgets of its own: a choice of animation,
+    //! a slider. Called inside the "Try it" panel, only while the panels are
+    //! shown, so that nothing the example needs to run may depend on it.
+    // ------------------------------------------------------------------------
+    virtual void controls() {}
+
+    // ------------------------------------------------------------------------
+    //! \brief Which physical keys fill \c Frame::input. The gallery asks for
+    //! this every frame; override to remap from Try it.
+    // ------------------------------------------------------------------------
+    [[nodiscard]] virtual scene::KeyMap keyMap() const { return scene::KeyMap::defaults(); }
+
+    // ------------------------------------------------------------------------
+    //! \brief Should a click on the picture hide the pointer and turn every
+    //! motion of the mouse into a look around, until Escape? What a first
+    //! person game wants. Off by default.
+    // ------------------------------------------------------------------------
+    [[nodiscard]] virtual bool capturesMouse() const { return false; }
+
+    // ------------------------------------------------------------------------
+    //! \brief A few lines written over the picture, panels shown or not: the
+    //! score of a game, a hint. A line starting with '!' is written large, in
+    //! the middle. Empty, the default, writes nothing.
+    // ------------------------------------------------------------------------
+    [[nodiscard]] virtual std::string hud() const { return {}; }
 };
 
 //! \brief How an example is handed around.

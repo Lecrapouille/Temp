@@ -33,7 +33,7 @@ that used to draw it.
 child / sibling links. A `TransformStore` holds local (position, rotation,
 scale) and derived world matrices in SoA arrays with dirty bits. Components
 (`Camera`, `DirectionalLight`, `PointLight`, `MeshRenderer`) are pure data
-hung on entities through `ComponentStore<T>`. Nothing in `world::` ever
+stored in an EnTT registry. Nothing in `world::` ever
 touches `gpu::`; the whole layer can run headless.
 
 **The `scene::` layer** is a *view* on a World: which camera Entity is used,
@@ -41,7 +41,7 @@ which clear colour, which environment. It does not own the World or the
 AssetManager, it references them. Two Scenes can share one World with two
 cameras.
 
-**The `render::` layer** is the bridge. `Extractor::extract` reads a Scene,
+**The `render::` layer** is the bridge. `SceneExtractor::extract` reads a Scene,
 walks the World's components, culls against the camera frustum, and returns
 a `RenderSnapshot` — a value that stands on its own with no pointer back into
 the World. A `Renderer` consumes a snapshot, sorts the items by material,
@@ -269,15 +269,14 @@ is the part that says which idea and why.
 with no data attached to it, the same idea as a `gpu::Handle`. The World
 composes four things that used to be one:
 
-- `EntityRegistry` hands out and reclaims Entity slots with a free list.
+- EnTT hands out entity identities and stores ordinary components.
 - `SpatialGraph` holds the parent / child / sibling links; cycles are
   refused by `setParent`, and reparenting has a `KeepLocal` / `KeepWorld`
   policy.
 - `TransformStore` holds local (position, rotation, scale) and derived world
   matrices in SoA arrays with a dirty bit per node.
-- `ComponentStore<T>` is a sparse set: O(1) add / remove / get, dense
-  iteration over the components that exist. There is one per component type
-  the user asks for, plus first-class stores for name and enabled flag.
+- `World::view<T...>()` and `World::each<T...>()` expose EnTT's dense
+  iteration while `EntityRef` supplies the application-facing façade.
 
 `World::update` runs `TransformSystem`, which walks the graph parents-before-
 children and refills only the dirty world matrices. Nothing else runs on the
@@ -295,7 +294,7 @@ Drawing is not `World::draw`. The `world::` layer has no `render` method at
 all. Presentation is a separate stack:
 
 - `scene::Scene` picks *which* World and *which* camera Entity are used.
-- `render::Extractor` writes a `RenderSnapshot`.
+- `render::SceneExtractor` writes a `RenderSnapshot`.
 - `render::Renderer` consumes the snapshot and emits `gpu::` calls.
 
 The snapshot is the interface. It is a value; it points at nothing in the
@@ -303,12 +302,10 @@ World. That is what lets the Renderer be tested against a hand-built
 snapshot with no World at all, and what will let extraction and rendering
 live on different threads.
 
-`world::` is not a game engine. There is no GameObject, no `onDraw`, no
-Behavior, no ShaderLib, no GLB, no prefab, no animation mixer, no physics,
-no input. Assets, materials and mesh data live one layer down, in `assets::`,
-owned by an `AssetManager` and named by ids. A file loader would deposit its
-results there and hand back ids to the caller; nothing in `world::` would
-change.
+`world::` still has no GameObject and no `onDraw`. Behaviors, animation and
+physics are systems over components. Assets, materials and mesh data live in
+`assets::`, owned by an `AssetManager` and named by ids. A glTF load returns a
+reusable prefab; a Scene instantiates it separately.
 
 A material at this level is one shared `gpu::Pipeline` (owned by a
 `Material`), plus per-instance parameters (owned by a `MaterialInstance`). A

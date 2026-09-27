@@ -1,10 +1,10 @@
 //==============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
@@ -15,12 +15,12 @@
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //==============================================================================
 
 #include "main.hpp"
 
-#include "GPU/Core/Pool.hpp"
+#include "Compages/GPU/Core/Pool.hpp"
 
 #include <memory>
 #include <vector>
@@ -222,8 +222,8 @@ TEST(Pool, VisitsEveryLiveResourceAndNoOther)
     std::vector<int> seen;
     std::vector<ThingHandle> handles;
     pool.forEach([&](ThingHandle p_handle, Thing& p_thing) {
-        seen.push_back(p_thing.value);
-        handles.push_back(p_handle);
+        seen.emplace_back(p_thing.value);
+        handles.emplace_back(p_handle);
     });
 
     ASSERT_THAT(seen, ElementsAre(1, 3));
@@ -242,7 +242,7 @@ TEST(Pool, GivesTheVisitorUsableHandles)
 
     std::vector<ThingHandle> handles;
     pool.forEach([&](ThingHandle p_handle, Thing&) {
-        handles.push_back(p_handle);
+        handles.emplace_back(p_handle);
     });
 
     for (auto const& handle : handles)

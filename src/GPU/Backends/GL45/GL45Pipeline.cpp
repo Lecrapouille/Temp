@@ -1,21 +1,21 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
 #include "GPU/Backends/GL45/GL45.hpp"
@@ -149,6 +149,9 @@ RenderState g_applied;
 //! \brief Has anything been applied yet? Until then nothing may be skipped,
 //! since what the driver starts with is not what g_applied says.
 bool g_state_known = false;
+
+//! \brief Are filled polygons drawn as their edges, whatever the pipelines say?
+bool g_wireframe = false;
 
 //------------------------------------------------------------------------------
 //! \brief The kind of number, as OpenGL names it.
@@ -444,10 +447,29 @@ void forgetRenderState()
 }
 
 //------------------------------------------------------------------------------
+void showWireframe(bool p_enabled)
+{
+    g_wireframe = p_enabled;
+    g_state_known = false;
+}
+
+//------------------------------------------------------------------------------
+bool wireframeShown()
+{
+    return g_wireframe;
+}
+
+//------------------------------------------------------------------------------
 void bindPipeline(NativeId p_program,
                   NativeId p_reader,
                   RenderState const& p_state)
 {
+    RenderState state = p_state;
+    if (g_wireframe && (state.polygon == PolygonMode::Fill))
+    {
+        state.polygon = PolygonMode::Line;
+    }
+
     const auto program = static_cast<GLuint>(p_program);
     if (program != g_used_program)
     {
@@ -467,9 +489,9 @@ void bindPipeline(NativeId p_program,
     // ours to assume.
     const bool everything = !g_state_known;
 
-    if (everything || (p_state.depth_test != g_applied.depth_test))
+    if (everything || (state.depth_test != g_applied.depth_test))
     {
-        if (p_state.depth_test)
+        if (state.depth_test)
         {
             glEnable(GL_DEPTH_TEST);
         }
@@ -478,26 +500,26 @@ void bindPipeline(NativeId p_program,
             glDisable(GL_DEPTH_TEST);
         }
     }
-    if (everything || (p_state.depth_write != g_applied.depth_write))
+    if (everything || (state.depth_write != g_applied.depth_write))
     {
-        glDepthMask(p_state.depth_write ? GL_TRUE : GL_FALSE);
+        glDepthMask(state.depth_write ? GL_TRUE : GL_FALSE);
     }
-    if (everything || (p_state.depth_func != g_applied.depth_func))
+    if (everything || (state.depth_func != g_applied.depth_func))
     {
-        glDepthFunc(toGL(p_state.depth_func));
+        glDepthFunc(toGL(state.depth_func));
     }
 
-    if (everything || !(p_state.blend == g_applied.blend))
+    if (everything || !(state.blend == g_applied.blend))
     {
-        if (p_state.blend.enabled)
+        if (state.blend.enabled)
         {
             glEnable(GL_BLEND);
-            glBlendFuncSeparate(toGL(p_state.blend.source_color),
-                                toGL(p_state.blend.destination_color),
-                                toGL(p_state.blend.source_alpha),
-                                toGL(p_state.blend.destination_alpha));
-            glBlendEquationSeparate(toGL(p_state.blend.color_equation),
-                                    toGL(p_state.blend.alpha_equation));
+            glBlendFuncSeparate(toGL(state.blend.source_color),
+                                toGL(state.blend.destination_color),
+                                toGL(state.blend.source_alpha),
+                                toGL(state.blend.destination_alpha));
+            glBlendEquationSeparate(toGL(state.blend.color_equation),
+                                    toGL(state.blend.alpha_equation));
         }
         else
         {
@@ -505,9 +527,9 @@ void bindPipeline(NativeId p_program,
         }
     }
 
-    if (everything || (p_state.cull != g_applied.cull))
+    if (everything || (state.cull != g_applied.cull))
     {
-        switch (p_state.cull)
+        switch (state.cull)
         {
             case CullMode::None:
                 glDisable(GL_CULL_FACE);
@@ -522,41 +544,41 @@ void bindPipeline(NativeId p_program,
                 break;
         }
     }
-    if (everything || (p_state.front_face != g_applied.front_face))
+    if (everything || (state.front_face != g_applied.front_face))
     {
-        glFrontFace((p_state.front_face == FrontFace::CounterClockwise) ? GL_CCW
+        glFrontFace((state.front_face == FrontFace::CounterClockwise) ? GL_CCW
                                                                        : GL_CW);
     }
 
-    if (everything || (p_state.polygon != g_applied.polygon))
+    if (everything || (state.polygon != g_applied.polygon))
     {
-        glPolygonMode(GL_FRONT_AND_BACK, toGL(p_state.polygon));
+        glPolygonMode(GL_FRONT_AND_BACK, toGL(state.polygon));
     }
 
-    if (everything || !(p_state.color_mask == g_applied.color_mask))
+    if (everything || !(state.color_mask == g_applied.color_mask))
     {
-        glColorMask(p_state.color_mask.red ? GL_TRUE : GL_FALSE,
-                    p_state.color_mask.green ? GL_TRUE : GL_FALSE,
-                    p_state.color_mask.blue ? GL_TRUE : GL_FALSE,
-                    p_state.color_mask.alpha ? GL_TRUE : GL_FALSE);
+        glColorMask(state.color_mask.red ? GL_TRUE : GL_FALSE,
+                    state.color_mask.green ? GL_TRUE : GL_FALSE,
+                    state.color_mask.blue ? GL_TRUE : GL_FALSE,
+                    state.color_mask.alpha ? GL_TRUE : GL_FALSE);
     }
 
-    if (everything || (std::bit_cast<std::uint32_t>(p_state.line_width) !=
+    if (everything || (std::bit_cast<std::uint32_t>(state.line_width) !=
                        std::bit_cast<std::uint32_t>(g_applied.line_width)))
     {
         // A core profile driver is allowed to refuse any width but one, and
         // several do. Asked for anyway, because it works on most desktop drivers
         // and a wireframe view is where it matters; the driver's own message says
         // so when it does not.
-        glLineWidth(p_state.line_width);
+        glLineWidth(state.line_width);
     }
 
-    if (everything || (p_state.primitive != g_applied.primitive))
+    if (everything || (state.primitive != g_applied.primitive))
     {
         // A point whose size comes from the vertex shader is invisible until
         // this is on: the default size is one pixel, and gl_PointSize is
         // ignored.
-        if (p_state.primitive == Primitive::Points)
+        if (state.primitive == Primitive::Points)
         {
             glEnable(GL_PROGRAM_POINT_SIZE);
         }
@@ -566,7 +588,7 @@ void bindPipeline(NativeId p_program,
         }
     }
 
-    g_applied = p_state;
+    g_applied = state;
     g_state_known = true;
 }
 

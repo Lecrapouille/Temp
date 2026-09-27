@@ -1,4 +1,4 @@
-PROJECT_NAME := OpenGLCppWrapper
+PROJECT_NAME := Compages
 PROJECT_VERSION := 0.10.0
 COMPILATION_MODE := debug
 CXX_STANDARD := --std=c++20

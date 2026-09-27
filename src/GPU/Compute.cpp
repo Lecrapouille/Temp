@@ -1,26 +1,26 @@
 //=============================================================================
-// OpenGLCppWrapper: A C++20 OpenGL wrapper.
+// Compages: A C++20 OpenGL wrapper.
 // Copyright 2018-2026 Quentin Quadrat <lecrapouille@gmail.com>
 //
-// This file is part of OpenGLCppWrapper.
+// This file is part of Compages.
 //
-// OpenGLCppWrapper is free software: you can redistribute it and/or modify it
+// Compages is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenGLCppWrapper is distributed in the hope that it will be useful, but
+// Compages is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 // General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenGLCppWrapper.  If not, see <http://www.gnu.org/licenses/>.
+// along with Compages.  If not, see <http://www.gnu.org/licenses/>.
 //=============================================================================
 
-#include "GPU/Compute.hpp"
+#include "Compages/GPU/Compute.hpp"
 #include "GPU/Backends/Backend.hpp"
-#include "GPU/Device.hpp"
+#include "Compages/GPU/Device.hpp"
 #include "GPU/Internal/Pools.hpp"
 #include "GPU/Internal/Statistics.hpp"
 
@@ -55,7 +55,12 @@ Status ensureCompute(Program const& p_program)
 //------------------------------------------------------------------------------
 Result<ComputeProgram> ComputeProgram::fromSource(std::string_view p_source)
 {
-    GPU_TRY_ASSIGN(program, Program::fromComputeSource(p_source));
+    auto program_result = Program::fromComputeSource(p_source);
+    if (!program_result)
+    {
+        return compages::failure(program_result.error());
+    }
+    auto program = program_result.take();
     if (program.reflection().work_group_size[0] == 0)
     {
         return failure(
@@ -69,7 +74,12 @@ Result<ComputeProgram> ComputeProgram::fromSource(std::string_view p_source)
 //------------------------------------------------------------------------------
 Result<ComputeProgram> ComputeProgram::fromFile(std::string const& p_path)
 {
-    GPU_TRY_ASSIGN(program, Program::fromComputeFile(p_path));
+    auto program_result = Program::fromComputeFile(p_path);
+    if (!program_result)
+    {
+        return compages::failure(program_result.error());
+    }
+    auto program = program_result.take();
     if (program.reflection().work_group_size[0] == 0)
     {
         return failure(
@@ -83,7 +93,7 @@ Result<ComputeProgram> ComputeProgram::fromFile(std::string const& p_path)
 //------------------------------------------------------------------------------
 Status ComputeProgram::bind(std::string_view p_block, BufferHandle p_buffer)
 {
-    GPU_TRY(ensureCompute(m_program));
+    COMPAGES_TRY(ensureCompute(m_program));
 
     ProgramReflection const& what = m_program.reflection();
     BlockInfo const* block = what.storageBlock(p_block);
@@ -126,7 +136,7 @@ Status ComputeProgram::dispatch(std::uint32_t p_groups_x,
         return failure("gpu::init() has not been called, so there is no device "
                        "to dispatch on");
     }
-    GPU_TRY(ensureCompute(m_program));
+    COMPAGES_TRY(ensureCompute(m_program));
 
     if ((p_groups_x == 0u) || (p_groups_y == 0u) || (p_groups_z == 0u))
     {
@@ -163,7 +173,7 @@ Status ComputeProgram::dispatch(std::uint32_t p_groups_x,
 //------------------------------------------------------------------------------
 Status ComputeProgram::dispatchItems(std::uint32_t p_count)
 {
-    GPU_TRY(ensureCompute(m_program));
+    COMPAGES_TRY(ensureCompute(m_program));
     if (p_count == 0u)
     {
         return failure(
